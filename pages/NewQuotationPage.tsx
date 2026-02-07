@@ -39,7 +39,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
   const [internalNotes, setInternalNotes] = useState('');
   const [storeName, setStoreName] = useState('');
   const [salesType, setSalesType] = useState('');
-  const [docType, setDocType] = useState(''); // Used as Priority Type in UI
+  const [docType, setDocType] = useState(''); // Used as Type in UI
   
   const [architectIncentive, setArchitectIncentive] = useState(0);
   const [architectIncentivePercent, setArchitectIncentivePercent] = useState(0);
@@ -51,6 +51,9 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
   const [qty, setQty] = useState(1);
   const [priceInput, setPriceInput] = useState(0);
   const [applyGst, setApplyGst] = useState(false);
+  const [bulkDiscountPercent, setBulkDiscountPercent] = useState(0);
+  const [salesPeople, setSalesPeople] = useState<string[]>([]);
+  const [newSalesPerson, setNewSalesPerson] = useState('');
 
   const customerLedgerBalance = useMemo(() => {
     if (!currentContactId) return 0;
@@ -89,6 +92,14 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
     }
   }, [editTransaction, getContactByMobile]);
 
+
+  useEffect(() => {
+    const defaults = ['SELF', 'MUKESH KUMAR'];
+    const stored = JSON.parse(localStorage.getItem('nexus_sales_people') || '[]') as string[];
+    const merged = [...new Set([...defaults, ...stored.map(v => String(v || '').trim().toUpperCase()).filter(Boolean)])].sort();
+    setSalesPeople(merged);
+  }, []);
+
   const handleMobileSearch = (val: string) => {
     setMobile(val);
     if (val.length === 10) {
@@ -120,6 +131,39 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
     setCurrentContactId(c.id);
   };
 
+
+  const recalcLine = (item: SalesItem, overrides?: Partial<SalesItem>): SalesItem => {
+    const next = { ...item, ...overrides };
+    const lineBase = (Number(next.orderedQty) || 0) * (Number(next.price) || 0);
+    const discountPercent = Math.max(0, Number(next.discountPercent) || 0);
+    const discount = Number(((lineBase * discountPercent) / 100).toFixed(2));
+    const taxable = Math.max(0, lineBase - discount);
+    const gstAmount = next.isGstEnabled ? (taxable * ((Number(next.gstRate) || 0) / 100)) : 0;
+    return { ...next, discount, discountPercent, total: Number((taxable + gstAmount).toFixed(2)) };
+  };
+
+  const updateLineItem = (idx: number, updates: Partial<SalesItem>) => {
+    setSelectedItems(prev => prev.map((item, i) => i === idx ? recalcLine(item, updates) : item));
+  };
+
+  const applyBulkDiscountToAllLines = () => {
+    const pct = Math.max(0, Number(bulkDiscountPercent) || 0);
+    setSelectedItems(prev => prev.map(item => recalcLine(item, { discountPercent: pct })));
+  };
+
+  const addSalesPersonOption = () => {
+    const normalized = newSalesPerson.trim().toUpperCase();
+    if (!normalized) return;
+    setSalesPeople(prev => {
+      if (prev.includes(normalized)) return prev;
+      const next = [...prev, normalized].sort();
+      localStorage.setItem('nexus_sales_people', JSON.stringify(next));
+      return next;
+    });
+    setSalesPerson(normalized);
+    setNewSalesPerson('');
+  };
+
   const totals = useMemo(() => {
     const lines = selectedItems.reduce((acc, item) => ({
       subtotal: acc.subtotal + (item.orderedQty * item.price),
@@ -134,13 +178,8 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
   const addItem = () => {
     const currentProduct = products.find(p => p.id === selectedProductId);
     if (!currentProduct) return;
-    const price = Number(priceInput) || 0;
-    const currentQty = Number(qty) || 0;
-    const lineBase = currentQty * price;
-    const totalDiscount = 0;
-    const afterDiscount = Math.max(0, lineBase - totalDiscount);
-    const gstAmount = applyGst ? (afterDiscount * 0.18) : 0;
-    setSelectedItems(prev => [...prev, {
+    const currentQty = Math.max(1, Number(qty) || 1);
+    const line = recalcLine({
       productId: currentProduct.id,
       productName: currentProduct.name,
       modelNo: currentProduct.modelNo,
@@ -148,13 +187,14 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
       orderedQty: currentQty,
       deliveredQty: 0,
       invoicedQty: 0,
-      price: price,
-      discount: totalDiscount,
+      price: Number(priceInput) || 0,
+      discount: 0,
       discountPercent: 0,
       gstRate: 18,
       isGstEnabled: applyGst,
-      total: afterDiscount + gstAmount
-    }]);
+      total: 0
+    });
+    setSelectedItems(prev => [...prev, line]);
     setSelectedProductId('');
     setQty(1);
     setPriceInput(0);
@@ -234,7 +274,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
             <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-4 gap-6">
                <h3 className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">Client & Header Info</h3>
                <div className="grid grid-cols-2 md:flex gap-6">
-                  <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Sales Person</p><input type="text" value={salesPerson} onChange={e => setSalesPerson(e.target.value.toUpperCase())} className="text-[10px] md:text-xs font-black uppercase text-slate-800 outline-none border-b border-dashed border-slate-200 w-full pb-1" placeholder="ENTER NAME" /></div>
+                  <div className="min-w-[180px]"><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Sales Person</p><select value={salesPerson} onChange={e => setSalesPerson(e.target.value)} className="text-[10px] md:text-xs font-black uppercase text-slate-800 outline-none border-b border-dashed border-slate-200 w-full pb-1 bg-transparent"><option value="">-- SELECT --</option>{salesPeople.map(sp => <option key={sp} value={sp}>{sp}</option>)}</select><div className="flex items-center gap-1 mt-1"><input type="text" value={newSalesPerson} onChange={e => setNewSalesPerson(e.target.value.toUpperCase())} className="text-[9px] font-black uppercase text-slate-700 outline-none border-b border-dashed border-slate-200 w-full pb-0.5" placeholder="ADD NEW" /><button type="button" onClick={addSalesPersonOption} className="px-2 py-1 text-[8px] font-black uppercase bg-indigo-50 text-indigo-600 rounded">Add</button></div></div>
                   <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Cord Name</p><input type="text" value={cordName} onChange={e => setCordName(e.target.value.toUpperCase())} className="text-[10px] md:text-xs font-black uppercase text-slate-800 outline-none border-b border-dashed border-slate-200 w-full pb-1" placeholder="ENTER CORD" /></div>
                   <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Booking Date</p><input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="text-[10px] md:text-xs font-black text-slate-800 outline-none w-full border-b border-dashed border-slate-200 pb-1" /></div>
                   <div><p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Expected Delivery</p><input type="date" value={expectedDeliveryDate} onChange={e => setExpectedDeliveryDate(e.target.value)} className="text-[10px] md:text-xs font-black text-slate-800 outline-none w-full border-b border-dashed border-slate-200 pb-1" /></div>
@@ -285,8 +325,8 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
                   <input type="text" value={salesType} onChange={e => setSalesType(e.target.value.toUpperCase())} placeholder="ENTER TYPE" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs shadow-sm" />
                </div>
                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Priority Type</label>
-                  <input type="text" value={docType} onChange={e => setDocType(e.target.value.toUpperCase())} placeholder="ENTER PRIORITY" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs shadow-sm" />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Type</label>
+                  <input type="text" value={docType} onChange={e => setDocType(e.target.value.toUpperCase())} placeholder="ENTER TYPE" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs shadow-sm" />
                </div>
             </div>
           </div>
@@ -329,20 +369,30 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
               <button type="button" onClick={addItem} className="w-full md:col-span-2 py-3 md:py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] md:text-xs uppercase shadow-lg hover:bg-indigo-700 active:scale-95 transition-all">Append</button>
             </div>
 
+            <div className="flex items-end gap-3 no-print">
+              <div>
+                <label className="block text-[8px] font-black uppercase text-slate-400 mb-1 ml-1">Bulk Discount % (All Lines)</label>
+                <input type="number" value={bulkDiscountPercent || ''} onChange={e => setBulkDiscountPercent(Number(e.target.value))} className="w-44 px-3 py-2.5 bg-slate-50 border rounded-xl text-[10px] font-black" />
+              </div>
+              <button type="button" onClick={applyBulkDiscountToAllLines} className="px-4 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase">Apply to All</button>
+            </div>
+
             <div className="overflow-x-auto">
                <table className="w-full text-[10px] md:text-xs border-collapse">
                  <thead className="bg-slate-50 text-[8px] md:text-[10px] font-black text-slate-400 uppercase border-b">
-                   <tr><th className="py-4 text-left px-4">Detail</th><th className="py-4 text-center">Qty</th><th className="py-4 text-center">Tax</th><th className="py-4 text-right px-4">Total</th><th className="py-4"></th></tr>
+                   <tr><th className="py-4 text-left px-4">Detail</th><th className="py-4 text-center">Qty</th><th className="py-4 text-center">Unit Rate</th><th className="py-4 text-center">Discount %</th><th className="py-4 text-center">Tax</th><th className="py-4 text-right px-4">Total</th><th className="py-4"></th></tr>
                  </thead>
                  <tbody className="divide-y divide-slate-50">
                    {selectedItems.length === 0 ? (
-                     <tr><td colSpan={5} className="py-12 text-center text-slate-300 uppercase font-black italic">No items added to this quotation yet</td></tr>
+                     <tr><td colSpan={7} className="py-12 text-center text-slate-300 uppercase font-black italic">No items added to this quotation yet</td></tr>
                    ) : (
                      selectedItems.map((item, idx) => (
                        <tr key={idx} className="group hover:bg-slate-50 transition-colors">
                          <td className="py-4 px-4 font-black uppercase text-slate-700">{item.productName} <span className="text-[8px] text-slate-400 block font-mono mt-0.5">{item.modelNo}</span></td>
-                         <td className="py-4 text-center font-bold text-slate-900">{item.orderedQty}</td>
-                         <td className="py-4 text-center text-[8px] md:text-[10px] font-black text-slate-400">{item.isGstEnabled ? '18%' : 'N/A'}</td>
+                         <td className="py-4 text-center"><input type="number" min={1} value={item.orderedQty} onChange={e => updateLineItem(idx, { orderedQty: Number(e.target.value) || 1 })} className="w-16 text-center px-2 py-1.5 bg-white border rounded-lg font-black text-[10px]" /></td>
+                         <td className="py-4 text-center"><input type="number" min={0} value={item.price} onChange={e => updateLineItem(idx, { price: Number(e.target.value) || 0 })} className="w-24 text-center px-2 py-1.5 bg-white border rounded-lg font-black text-[10px]" /></td>
+                         <td className="py-4 text-center"><input type="number" min={0} value={item.discountPercent || 0} onChange={e => updateLineItem(idx, { discountPercent: Number(e.target.value) || 0 })} className="w-20 text-center px-2 py-1.5 bg-white border rounded-lg font-black text-[10px]" /></td>
+                         <td className="py-4 text-center text-[8px] md:text-[10px] font-black text-slate-400">{item.isGstEnabled ? `${item.gstRate}%` : 'N/A'}</td>
                          <td className="py-4 px-4 text-right font-black text-slate-900">₹{item.total.toLocaleString()}</td>
                          <td className="py-4 text-center"><button onClick={() => removeItem(idx)} className="p-2 text-slate-300 hover:text-rose-500 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button></td>
                        </tr>
