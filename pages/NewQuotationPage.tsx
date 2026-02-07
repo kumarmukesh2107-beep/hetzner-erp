@@ -39,7 +39,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
   const [internalNotes, setInternalNotes] = useState('');
   const [storeName, setStoreName] = useState('');
   const [salesType, setSalesType] = useState('');
-  const [docType, setDocType] = useState(''); // Used as Priority Type in UI
+  const [docType, setDocType] = useState(''); // Used as Type in UI
   
   const [architectIncentive, setArchitectIncentive] = useState(0);
   const [architectIncentivePercent, setArchitectIncentivePercent] = useState(0);
@@ -325,8 +325,8 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
                   <input type="text" value={salesType} onChange={e => setSalesType(e.target.value.toUpperCase())} placeholder="ENTER TYPE" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs shadow-sm" />
                </div>
                <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Priority Type</label>
-                  <input type="text" value={docType} onChange={e => setDocType(e.target.value.toUpperCase())} placeholder="ENTER PRIORITY" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs shadow-sm" />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Type</label>
+                  <input type="text" value={docType} onChange={e => setDocType(e.target.value.toUpperCase())} placeholder="ENTER TYPE" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs shadow-sm" />
                </div>
             </div>
           </div>

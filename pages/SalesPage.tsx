@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useSales } from '../context/SalesContext';
 import { useInventory } from '../context/InventoryContext';
@@ -42,8 +42,9 @@ const StatusBadge: React.FC<{ status: SalesStatus, isHistorical?: boolean }> = (
 };
 
 const SalesPage: React.FC = () => {
-  const { sales } = useSales();
+  const { sales, markQuotationSent, confirmOrder, recordDelivery, createInvoice, addSalePayment, reconcileAdvance } = useSales();
   const { activeCompany } = useCompany();
+  const { accounts } = useAccounting();
   const { templates } = useSettings();
   const location = useLocation();
   
@@ -62,6 +63,26 @@ const SalesPage: React.FC = () => {
   const [selectedTxId, setSelectedTxId] = useState<string | null>(null);
   const [editingTx, setEditingTx] = useState<SalesTransaction | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('std-doc');
+
+  const [deliveryInputs, setDeliveryInputs] = useState<Record<string, number>>({});
+  const [deliveryWarehouse, setDeliveryWarehouse] = useState<WarehouseType>(WarehouseType.GODOWN);
+  const [invoiceInputs, setInvoiceInputs] = useState<Record<string, number>>({});
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [advanceAdjustAmount, setAdvanceAdjustAmount] = useState(0);
+
+  useEffect(() => {
+    if (!selectedTx) {
+      setDeliveryInputs({});
+      setInvoiceInputs({});
+      setPaymentAmount(0);
+      setPaymentRef('');
+      setAdvanceAdjustAmount(0);
+      return;
+    }
+    setDeliveryWarehouse(selectedTx.warehouse);
+  }, [selectedTx]);
 
   const selectedTx = useMemo<SalesTransaction | null>(() => sales.find(s => s.id === selectedTxId) || null, [sales, selectedTxId]);
 
@@ -117,6 +138,55 @@ const SalesPage: React.FC = () => {
     setEditingTx(tx);
     setShowNewForm(true);
     setSelectedTxId(null);
+  };
+
+
+  const handleConfirmQuotation = () => {
+    if (!selectedTx) return;
+    const ok = confirmOrder(selectedTx.id);
+    if (ok) alert('Quotation confirmed. Sales order created.');
+  };
+
+  const handleRecordDelivery = () => {
+    if (!selectedTx) return;
+    const deliveries = Object.entries(deliveryInputs)
+      .map(([productId, qty]) => ({ productId, qty: Number(qty) || 0 }))
+      .filter(d => d.qty > 0);
+    if (deliveries.length === 0) return alert('Enter delivery quantities.');
+    if (recordDelivery(selectedTx.id, deliveries, deliveryWarehouse)) {
+      alert('Delivery order recorded.');
+      setDeliveryInputs({});
+    }
+  };
+
+  const handleCreateInvoice = () => {
+    if (!selectedTx) return;
+    const invoiceLines = Object.entries(invoiceInputs)
+      .map(([productId, qty]) => ({ productId, qty: Number(qty) || 0 }))
+      .filter(i => i.qty > 0);
+    if (invoiceLines.length === 0) return alert('Enter invoice quantities.');
+    if (createInvoice(selectedTx.id, invoiceLines)) {
+      alert('Invoice generated successfully.');
+      setInvoiceInputs({});
+    }
+  };
+
+  const handleCollectPayment = () => {
+    if (!selectedTx) return;
+    if (!paymentAmount || paymentAmount <= 0) return alert('Enter payment amount.');
+    if (!paymentAccountId) return alert('Select account.');
+    addSalePayment(selectedTx.id, paymentAmount, paymentAccountId, paymentRef || `RCPT-${Date.now().toString().slice(-6)}`);
+    alert('Payment collected and mapped to invoice.');
+    setPaymentAmount(0);
+    setPaymentRef('');
+  };
+
+  const handleMapAdvance = () => {
+    if (!selectedTx) return;
+    if (!advanceAdjustAmount || advanceAdjustAmount <= 0) return alert('Enter advance amount to map.');
+    reconcileAdvance(selectedTx.id, advanceAdjustAmount);
+    alert('Advance mapped against invoice.');
+    setAdvanceAdjustAmount(0);
   };
 
   const executePrint = () => {
@@ -313,6 +383,62 @@ const SalesPage: React.FC = () => {
                    remarks={selectedTx.remarks}
                  />
               </div>
+
+              {!selectedTx.isHistorical && (
+                <div className="p-6 md:p-10 bg-slate-50 border-t border-slate-100 space-y-6 no-print">
+                  {(selectedTx.status === SalesStatus.QUOTATION || selectedTx.status === SalesStatus.QUOTATION_SENT) && (
+                    <div className="bg-indigo-600 text-white rounded-3xl p-6 flex items-center justify-between">
+                      <div>
+                        <h4 className="text-lg font-black uppercase">Confirm Quotation</h4>
+                        <p className="text-xs opacity-80">On confirmation, quote becomes sales order and quantities move to booked stock.</p>
+                      </div>
+                      <button onClick={handleConfirmQuotation} className="px-6 py-3 bg-white text-indigo-600 rounded-xl text-[10px] font-black uppercase">Confirm Quote</button>
+                    </div>
+                  )}
+
+                  {(selectedTx.status === SalesStatus.SALES_ORDER || selectedTx.status === SalesStatus.PARTIALLY_DELIVERED) && (
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
+                      <h4 className="text-xs font-black uppercase text-slate-700">Delivery Order Generation (Partial Supported)</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        <select value={deliveryWarehouse} onChange={e => setDeliveryWarehouse(e.target.value as WarehouseType)} className="px-3 py-2 border rounded-xl text-xs font-black uppercase">{Object.values(WarehouseType).map(w => <option key={w} value={w}>{w}</option>)}</select>
+                      </div>
+                      <div className="space-y-2">{selectedTx.items.map(it => {
+                        const pending = it.orderedQty - it.deliveredQty;
+                        return <div key={it.productId} className="flex items-center justify-between"><p className="text-xs font-bold uppercase">{it.productName} <span className="text-slate-400">(Pending: {pending})</span></p><input type="number" min={0} max={pending} value={deliveryInputs[it.productId] || 0} onChange={e => setDeliveryInputs(prev => ({...prev, [it.productId]: Number(e.target.value)}))} className="w-24 px-2 py-1.5 border rounded-lg text-xs font-black" /></div>
+                      })}</div>
+                      <button onClick={handleRecordDelivery} className="w-full py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase">Record Delivery</button>
+                    </div>
+                  )}
+
+                  {(selectedTx.status === SalesStatus.PARTIALLY_DELIVERED || selectedTx.status === SalesStatus.FULLY_DELIVERED || selectedTx.status === SalesStatus.PARTIALLY_BILLED) && (
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
+                      <h4 className="text-xs font-black uppercase text-slate-700">Generate Invoice (Partial Supported)</h4>
+                      <div className="space-y-2">{selectedTx.items.map(it => {
+                        const pendingInv = it.deliveredQty - it.invoicedQty;
+                        return <div key={it.productId} className="flex items-center justify-between"><p className="text-xs font-bold uppercase">{it.productName} <span className="text-slate-400">(Delivered: {it.deliveredQty} | Invoiced: {it.invoicedQty})</span></p><input type="number" min={0} max={Math.max(0,pendingInv)} value={invoiceInputs[it.productId] || 0} onChange={e => setInvoiceInputs(prev => ({...prev, [it.productId]: Number(e.target.value)}))} className="w-24 px-2 py-1.5 border rounded-lg text-xs font-black" /></div>
+                      })}</div>
+                      <button onClick={handleCreateInvoice} className="w-full py-3 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase">Generate Invoice</button>
+                    </div>
+                  )}
+
+                  {(selectedTx.status === SalesStatus.PARTIALLY_BILLED || selectedTx.status === SalesStatus.FULLY_BILLED) && (
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 space-y-4">
+                      <h4 className="text-xs font-black uppercase text-slate-700">Collect Payment / Map Advance</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input type="number" value={paymentAmount || ''} onChange={e => setPaymentAmount(Number(e.target.value))} placeholder="Payment Amount" className="px-3 py-2 border rounded-xl text-xs font-black" />
+                        <select value={paymentAccountId} onChange={e => setPaymentAccountId(e.target.value)} className="px-3 py-2 border rounded-xl text-xs font-black"><option value="">Select Account</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                        <input type="text" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} placeholder="Reference" className="px-3 py-2 border rounded-xl text-xs font-black" />
+                      </div>
+                      <button onClick={handleCollectPayment} className="w-full py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase">Collect Payment</button>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <input type="number" value={advanceAdjustAmount || ''} onChange={e => setAdvanceAdjustAmount(Number(e.target.value))} placeholder="Map Existing Advance" className="px-3 py-2 border rounded-xl text-xs font-black" />
+                        <button onClick={handleMapAdvance} className="py-2 bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase">Map Advance</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
            </div>
            <div className="absolute inset-0 -z-10 cursor-pointer" onClick={() => setSelectedTxId(null)} />
         </div>
