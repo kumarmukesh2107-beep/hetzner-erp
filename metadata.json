@@ -1,0 +1,7 @@
+{
+  "name": "final NexusERP UPDATED TILL 31.01.2026 17.10",
+  "description": "A modern, scalable enterprise resource planning (ERP) foundation with authentication, role-based access control, and modular navigation structure.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
