@@ -114,15 +114,17 @@ const InventoryPage: React.FC = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('All Brands');
+  const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseType | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'In Stock' | 'Out of Stock' | 'Low Stock'>('All');
 
   // Form States
-  const [transferData, setTransferData] = useState({ productId: '', from: WarehouseType.GODOWN, to: WarehouseType.DISPLAY, qty: 0, date: new Date().toISOString().split('T')[0] });
+  const [transferData, setTransferData] = useState({ productId: '', from: WarehouseType.GODOWN, to: WarehouseType.DISPLAY, qty: 0, date: new Date().toISOString().split('T')[0], remarks: '' });
   const [receiptData, setReceiptData] = useState({ productId: '', warehouse: WarehouseType.GODOWN, qty: 0, date: new Date().toISOString().split('T')[0], supplier: '', remarks: '', staff: user?.name || '' });
   const [deliveryData, setDeliveryData] = useState({ productId: '', warehouse: WarehouseType.GODOWN, qty: 0, date: new Date().toISOString().split('T')[0], customer: '', rep: user?.name || '', remarks: '' });
 
   const brands = useMemo(() => ['All Brands', ...new Set(products.map(p => p.brand))].sort(), [products]);
+  const categories = useMemo(() => ['All Categories', ...new Set(products.map(p => p.category))].sort(), [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -130,16 +132,19 @@ const InventoryPage: React.FC = () => {
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.modelNo.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesBrand = selectedBrand === 'All Brands' || p.brand === selectedBrand;
-      
+      const matchesCategory = selectedCategory === 'All Categories' || p.category === selectedCategory;
+      const stocks = getProductStock(p.id);
+      const matchesWarehouse = selectedWarehouse === 'All' || (stocks.find(st => st.warehouse === selectedWarehouse)?.quantity || 0) > 0;
+
       const total = getTotalStock(p.id);
       let matchesStatus = true;
       if (statusFilter === 'In Stock') matchesStatus = total > 0;
       else if (statusFilter === 'Out of Stock') matchesStatus = total === 0;
       else if (statusFilter === 'Low Stock') matchesStatus = total > 0 && total < 10;
 
-      return matchesSearch && matchesBrand && matchesStatus;
+      return matchesSearch && matchesBrand && matchesCategory && matchesWarehouse && matchesStatus;
     });
-  }, [products, searchTerm, selectedBrand, statusFilter, getTotalStock]);
+  }, [products, searchTerm, selectedBrand, selectedCategory, selectedWarehouse, statusFilter, getTotalStock, getProductStock]);
 
   const unifiedHistory = useMemo(() => {
     const events: TransactionEvent[] = [];
@@ -149,7 +154,7 @@ const InventoryPage: React.FC = () => {
         id: t.id,
         date: t.date,
         type: 'TRANSFER',
-        reference: 'Internal Move',
+        reference: t.remarks?.trim() ? `Internal Move • ${t.remarks}` : 'Internal Move',
         from: t.sourceWarehouse,
         to: t.destinationWarehouse,
         qtyChange: t.quantity,
@@ -218,9 +223,9 @@ const InventoryPage: React.FC = () => {
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferData.productId || transferData.qty <= 0) return alert("Select product and valid quantity");
-    if (transferStock(transferData.productId, transferData.from, transferData.to, transferData.qty, { date: transferData.date })) {
+    if (transferStock(transferData.productId, transferData.from, transferData.to, transferData.qty, { date: transferData.date, remarks: transferData.remarks })) {
       alert("Transfer authorized successfully.");
-      setTransferData({ ...transferData, qty: 0, productId: '' });
+      setTransferData({ ...transferData, qty: 0, productId: '', remarks: '' });
     } else {
       alert("Insufficient stock in source warehouse.");
     }
@@ -296,6 +301,9 @@ const InventoryPage: React.FC = () => {
                </select>
                <select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} className="py-2.5 px-4 text-xs border border-slate-200 rounded-xl bg-slate-50 font-black uppercase outline-none">
                   {brands.map(b => <option key={b} value={b}>{b}</option>)}
+               </select>
+               <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="py-2.5 px-4 text-xs border border-slate-200 rounded-xl bg-slate-50 font-black uppercase outline-none">
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
                </select>
                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="py-2.5 px-4 text-xs border border-slate-200 rounded-xl bg-slate-50 font-black uppercase outline-none">
                   <option value="All">All Status</option>
@@ -387,6 +395,18 @@ const InventoryPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          <div className="hidden" aria-hidden>
+            <InventoryStockDocument
+              company={activeCompany}
+              products={filteredProducts}
+              warehouseFilter={selectedWarehouse}
+              getStockFn={(id, wh) => getProductStock(id).find(s => s.warehouse === wh)?.quantity || 0}
+              getTotalStockFn={getTotalStock}
+              getSellableStockFn={getSellableStock}
+              user={user?.name || 'System'}
+            />
+          </div>
         </div>
       )}
 
@@ -405,6 +425,7 @@ const InventoryPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-6">
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Quantity</label><input required type="number" value={transferData.qty || ''} onChange={e => setTransferData({...transferData, qty: Number(e.target.value)})} className="w-full px-5 py-3 bg-slate-50 border rounded-2xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Transfer Date</label><input required type="date" value={transferData.date} onChange={e => setTransferData({...transferData, date: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border rounded-2xl font-black text-xs outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Remarks</label><input type="text" placeholder="Reason / note for this movement" value={transferData.remarks} onChange={e => setTransferData({...transferData, remarks: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border rounded-2xl font-bold text-xs outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               </div>
               <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-3xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-indigo-700 active:scale-95 transition-all">Authorize Transfer</button>
            </form>

@@ -27,7 +27,7 @@ interface InventoryContextType {
   addHistoricalShadowProduct: (data: Partial<Product>) => Product;
   bulkImportProducts: (items: any[], mode: 'add_only' | 'update_only' | 'add_update', createMissingCategories?: string[]) => ImportResult;
   bulkImportStocks: (stockData: any[]) => ImportResult;
-  transferStock: (productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string }) => boolean;
+  transferStock: (productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string; remarks?: string }) => boolean;
   increaseStock: (productId: string, warehouse: WarehouseType, qty: number) => void;
   deductStock: (productId: string, warehouse: WarehouseType, qty: number) => boolean;
   recordManualReceipt: (productId: string, warehouse: WarehouseType, qty: number, reference: string, date: string, partyName: string, salesPerson?: string) => void;
@@ -386,7 +386,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return success;
   }, [activeCompany]);
 
-  const transferStock = useCallback((productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string }) => {
+  const transferStock = useCallback((productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string; remarks?: string }) => {
     if (!activeCompany) return false;
     const success = deductStock(productId, from, qty);
     if (!success) return false;
@@ -402,7 +402,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       date: options?.date || new Date().toISOString().split('T')[0],
       performedBy: user?.name || 'System',
       partyName: options?.partyName,
-      salesPerson: options?.salesPerson
+      salesPerson: options?.salesPerson,
+      remarks: options?.remarks
     }, ...prev]);
     return true;
   }, [deductStock, increaseStock, user, activeCompany]);
