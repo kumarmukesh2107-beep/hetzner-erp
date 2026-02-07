@@ -117,6 +117,7 @@ const InventoryPage: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseType | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'In Stock' | 'Out of Stock' | 'Low Stock'>('All');
+  const [bookedSearch, setBookedSearch] = useState('');
 
   // Form States
   const [transferData, setTransferData] = useState({ productId: '', from: WarehouseType.GODOWN, to: WarehouseType.DISPLAY, qty: 0, date: new Date().toISOString().split('T')[0], remarks: '' });
@@ -219,6 +220,51 @@ const InventoryPage: React.FC = () => {
       return row;
     }).filter(row => row.totalQty > 0);
   }, [products, getProductStock]);
+
+
+  const bookedItemsData = useMemo(() => {
+    return products
+      .map((p) => {
+        const bookedQty = getProductStock(p.id).find(s => s.warehouse === WarehouseType.BOOKED)?.quantity || 0;
+        return { product: p, bookedQty };
+      })
+      .filter(item => item.bookedQty > 0 && (
+        !bookedSearch.trim() ||
+        item.product.name.toLowerCase().includes(bookedSearch.toLowerCase()) ||
+        item.product.modelNo.toLowerCase().includes(bookedSearch.toLowerCase())
+      ));
+  }, [products, getProductStock, bookedSearch]);
+
+  const handleExportHistory = () => {
+    const rows = unifiedHistory.map((evt) => ({
+      Date: evt.date,
+      Event: evt.type,
+      Product: evt.productName || '-',
+      Movement: evt.qtyChange,
+      Route: `${evt.from || '-'} -> ${evt.to || '-'}`,
+      Auditor: evt.performedBy || '-'
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'History');
+    XLSX.writeFile(wb, `inventory-history-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handleExportBooked = () => {
+    const rows = bookedItemsData.map(({ product, bookedQty }) => ({
+      Product: product.name,
+      SKU: product.modelNo,
+      Brand: product.brand,
+      Category: product.category,
+      BookedQty: bookedQty,
+      Warehouse: WarehouseType.BOOKED,
+      Context: 'System Booked Stock'
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Booked_Items');
+    XLSX.writeFile(wb, `inventory-booked-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
@@ -592,7 +638,12 @@ const InventoryPage: React.FC = () => {
       )}
 
       {activeTab === 'history' && (
-        <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
+        <div className="space-y-4 animate-in fade-in duration-300">
+           <div className="flex justify-end gap-2 no-print">
+              <button onClick={() => triggerStandalonePrint('printable-inventory-history', 'Inventory_History_Report')} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Print</button>
+              <button onClick={handleExportHistory} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Export</button>
+           </div>
+        <div id="printable-inventory-history" className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
            <table className="w-full text-sm text-left">
               <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
                  <tr><th className="px-10 py-5">Date</th><th className="px-6 py-5">Event</th><th className="px-6 py-5">SKU / Product</th><th className="px-6 py-5 text-center">Movement</th><th className="px-6 py-5">Route</th><th className="px-8 py-5 text-right">Auditor</th></tr>
@@ -611,22 +662,40 @@ const InventoryPage: React.FC = () => {
               </tbody>
            </table>
         </div>
+        </div>
       )}
 
-      {/* Booked Tab Remains Identical */}
+      {/* Booked Tab */}
       {activeTab === 'booked' && (
         <div className="space-y-6 animate-in fade-in duration-500">
-           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
-              <input type="text" placeholder="Search product..." className="flex-1 py-2.5 px-4 text-xs border border-slate-200 rounded-xl outline-none" />
+           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4 no-print">
+              <input type="text" value={bookedSearch} onChange={e => setBookedSearch(e.target.value)} placeholder="Search product..." className="flex-1 py-2.5 px-4 text-xs border border-slate-200 rounded-xl outline-none" />
+              <div className="flex gap-2">
+                 <button onClick={() => triggerStandalonePrint('printable-inventory-booked', 'Booked_Items_Report')} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Print</button>
+                 <button onClick={handleExportBooked} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Export</button>
+              </div>
            </div>
-           <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+           <div id="printable-inventory-booked" className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
               <table className="w-full text-sm text-left">
                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
                     <tr><th className="px-10 py-5">Product Info</th><th className="px-6 py-5 text-center">Qty</th><th className="px-6 py-5">Party Details</th><th className="px-6 py-5 text-center">Warehouse</th><th className="px-8 py-5 text-right">Booking Context</th></tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {/* Simplified for view as requested - logic stays same */}
-                    <tr><td colSpan={5} className="py-24 text-center text-slate-300 uppercase font-black italic">Navigate to Stock tab to see expansions or verify Booked Items logic</td></tr>
+                    {bookedItemsData.map(({ product, bookedQty }) => (
+                      <tr key={product.id} className="hover:bg-slate-50">
+                        <td className="px-10 py-5">
+                          <p className="font-black text-slate-800 uppercase text-xs">{product.name}</p>
+                          <p className="text-[10px] font-mono font-bold text-slate-400">{product.modelNo} • {product.brand}</p>
+                        </td>
+                        <td className="px-6 py-5 text-center font-black text-slate-900">{bookedQty}</td>
+                        <td className="px-6 py-5 text-xs font-bold text-slate-400 uppercase">SYSTEM</td>
+                        <td className="px-6 py-5 text-center text-[10px] font-black text-amber-600 uppercase">BOOKED</td>
+                        <td className="px-8 py-5 text-right text-[10px] font-black text-slate-500 uppercase">System Booked Stock</td>
+                      </tr>
+                    ))}
+                    {bookedItemsData.length === 0 && (
+                      <tr><td colSpan={5} className="py-24 text-center text-slate-300 uppercase font-black italic">No booked items found for current search.</td></tr>
+                    )}
                  </tbody>
               </table>
            </div>
