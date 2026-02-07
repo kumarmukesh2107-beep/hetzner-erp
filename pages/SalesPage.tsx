@@ -72,6 +72,8 @@ const SalesPage: React.FC = () => {
   const [paymentRef, setPaymentRef] = useState('');
   const [advanceAdjustAmount, setAdvanceAdjustAmount] = useState(0);
 
+  const selectedTx = useMemo<SalesTransaction | null>(() => sales.find(s => s.id === selectedTxId) || null, [sales, selectedTxId]);
+
   useEffect(() => {
     if (!selectedTx) {
       setDeliveryInputs({});
@@ -83,8 +85,6 @@ const SalesPage: React.FC = () => {
     }
     setDeliveryWarehouse(selectedTx.warehouse);
   }, [selectedTx]);
-
-  const selectedTx = useMemo<SalesTransaction | null>(() => sales.find(s => s.id === selectedTxId) || null, [sales, selectedTxId]);
 
   const processedData = useMemo(() => {
     let result = activeTab === 'quotations' 
