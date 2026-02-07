@@ -16,6 +16,13 @@ const PayrollProcess: React.FC = () => {
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+  const geminiApiKey =
+    process.env.API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    import.meta.env.VITE_GEMINI_API_KEY ||
+    import.meta.env.VITE_API_KEY ||
+    '';
+
   const mapMonthName = (extracted: string): string => {
     const monthMap: Record<string, string> = {
       'JAN': 'January', 'FEB': 'February', 'MAR': 'March', 'APR': 'April', 'MAY': 'May', 'JUN': 'June',
@@ -125,7 +132,11 @@ const PayrollProcess: React.FC = () => {
         reader.onerror = () => reject(new Error('Failed to read uploaded file.'));
       });
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      if (!geminiApiKey) {
+        throw new Error('Missing Gemini API key. Configure GEMINI_API_KEY (or API_KEY / VITE_GEMINI_API_KEY) in deployment environment.');
+      }
+
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [{
