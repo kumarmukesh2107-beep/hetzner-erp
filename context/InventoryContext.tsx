@@ -27,7 +27,7 @@ interface InventoryContextType {
   addHistoricalShadowProduct: (data: Partial<Product>) => Product;
   bulkImportProducts: (items: any[], mode: 'add_only' | 'update_only' | 'add_update', createMissingCategories?: string[]) => ImportResult;
   bulkImportStocks: (stockData: any[]) => ImportResult;
-  transferStock: (productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string }) => boolean;
+  transferStock: (productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string; remarks?: string }) => boolean;
   increaseStock: (productId: string, warehouse: WarehouseType, qty: number) => void;
   deductStock: (productId: string, warehouse: WarehouseType, qty: number) => boolean;
   recordManualReceipt: (productId: string, warehouse: WarehouseType, qty: number, reference: string, date: string, partyName: string, salesPerson?: string) => void;
@@ -184,25 +184,35 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const bulkImportProducts = useCallback((items: any[], mode: 'add_only' | 'update_only' | 'add_update', createMissingCategories?: string[]): ImportResult => {
     if (!activeCompany) return { total: 0, success: 0, updated: 0, failed: 0, warnings: 0, newCategories: [], errors: ['No active company selected.'] };
-    
-    if (createMissingCategories && createMissingCategories.length > 0) {
-      createMissingCategories.forEach(catName => {
-        addCategory({ name: catName, status: 'ACTIVE', source: 'IMPORT' });
-      });
-    }
 
     const result: ImportResult = { total: items.length, success: 0, updated: 0, failed: 0, warnings: 0, newCategories: [], errors: [] };
     const nextProducts = [...allProducts];
 
+    const normalizeCategoryKey = (val: any) => normalizeValue(val).replace(/[\s-]/g, '');
     const currentCategories = allCategories.filter(c => c.companyId === activeCompany.id);
-    const knownCategoryNames = new Set(currentCategories.map(c => normalizeValue(c.name)));
+    const categoryNameByKey = new Map<string, string>();
+
+    currentCategories.forEach((c) => {
+      const key = normalizeCategoryKey(c.name);
+      if (key && !categoryNameByKey.has(key)) categoryNameByKey.set(key, c.name);
+    });
 
     const mapVal = (row: any, keys: string[]) => {
-      const foundKey = Object.keys(row).find(k => 
-        keys.includes(k.toLowerCase().replace(/[\s*_]/g, ''))
-      );
+      const normalizeHeader = (val: string) => val.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normalizedTargets = keys.map(normalizeHeader);
+      const foundKey = Object.keys(row).find(k => normalizedTargets.includes(normalizeHeader(k)));
       return foundKey ? row[foundKey] : undefined;
     };
+
+    if (createMissingCategories && createMissingCategories.length > 0) {
+      createMissingCategories.forEach(rawCatName => {
+        const normalizedCat = normalizeValue(rawCatName).replace(/\s+/g, ' ').trim();
+        const catKey = normalizeCategoryKey(normalizedCat);
+        if (!catKey || categoryNameByKey.has(catKey)) return;
+        const created = addCategory({ name: normalizedCat, status: 'ACTIVE', source: 'IMPORT' });
+        categoryNameByKey.set(catKey, created.name);
+      });
+    }
 
     const seenModelNosInBatch = new Set<string>();
 
@@ -213,7 +223,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const name = String(mapVal(row, ['productname', 'name', 'itemname', 'product_name']) || '').trim();
       const sPrice = Number(mapVal(row, ['salesprice', 'sellingprice', 'price', 'mrp']) || 0);
       const cPrice = Number(mapVal(row, ['costprice', 'cost', 'purchaseprice']) || 0);
-      
+
       if (!modelNo || !name || isNaN(sPrice) || isNaN(cPrice)) {
         result.failed++;
         result.errors.push(`Row ${rowNum}: Mandatory field missing.`);
@@ -228,7 +238,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       seenModelNosInBatch.add(modelNo);
 
       const existingIdx = nextProducts.findIndex(p => p.modelNo.toUpperCase() === modelNo && p.companyId === activeCompany.id);
-      
+
       if (mode === 'add_only' && existingIdx > -1) {
         result.failed++;
         result.errors.push(`Row ${rowNum}: Model No already exists.`);
@@ -240,21 +250,19 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return;
       }
 
-      const excelCategoryRaw = mapVal(row, ['category', 'group', 'type']);
-      const categoryNormalized = normalizeValue(excelCategoryRaw);
+      const excelCategoryRaw = mapVal(row, ['category', 'group', 'type', 'categorygroup', 'productcategory', 'productgroup']);
+      const categoryNormalized = normalizeValue(excelCategoryRaw).replace(/\s+/g, ' ').trim();
+      const categoryKey = normalizeCategoryKey(categoryNormalized);
       let finalCategory = '';
 
-      if (categoryNormalized) {
-        if (knownCategoryNames.has(categoryNormalized)) {
-          finalCategory = categoryNormalized;
+      if (categoryKey) {
+        const existingCategoryName = categoryNameByKey.get(categoryKey);
+        if (existingCategoryName) {
+          finalCategory = existingCategoryName;
         } else {
-          if (!createMissingCategories) {
-             if (!result.newCategories.includes(categoryNormalized)) {
-                result.newCategories.push(categoryNormalized);
-             }
-          }
-          finalCategory = 'UNCATEGORIZED';
-          result.warnings++;
+          const created = addCategory({ name: categoryNormalized, status: 'ACTIVE', source: 'IMPORT' });
+          finalCategory = created.name;
+          categoryNameByKey.set(categoryKey, created.name);
         }
       } else if (existingIdx > -1) {
         finalCategory = nextProducts[existingIdx].category;
@@ -300,9 +308,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const nextStocks = [...allStocks];
 
     const mapVal = (row: any, keys: string[]) => {
-      const foundKey = Object.keys(row).find(k => 
-        keys.includes(k.toLowerCase().replace(/[\s*_]/g, ''))
-      );
+      const normalizeHeader = (val: string) => val.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normalizedTargets = keys.map(normalizeHeader);
+      const foundKey = Object.keys(row).find(k => normalizedTargets.includes(normalizeHeader(k)));
       return foundKey ? row[foundKey] : undefined;
     };
 
@@ -378,7 +386,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return success;
   }, [activeCompany]);
 
-  const transferStock = useCallback((productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string }) => {
+  const transferStock = useCallback((productId: string, from: WarehouseType, to: WarehouseType, qty: number, options?: { partyName?: string; salesPerson?: string; date?: string; remarks?: string }) => {
     if (!activeCompany) return false;
     const success = deductStock(productId, from, qty);
     if (!success) return false;
@@ -394,7 +402,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       date: options?.date || new Date().toISOString().split('T')[0],
       performedBy: user?.name || 'System',
       partyName: options?.partyName,
-      salesPerson: options?.salesPerson
+      salesPerson: options?.salesPerson,
+      remarks: options?.remarks
     }, ...prev]);
     return true;
   }, [deductStock, increaseStock, user, activeCompany]);

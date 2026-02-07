@@ -114,15 +114,18 @@ const InventoryPage: React.FC = () => {
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBrand, setSelectedBrand] = useState('All Brands');
+  const [selectedCategory, setSelectedCategory] = useState('All Categories');
   const [selectedWarehouse, setSelectedWarehouse] = useState<WarehouseType | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'In Stock' | 'Out of Stock' | 'Low Stock'>('All');
+  const [bookedSearch, setBookedSearch] = useState('');
 
   // Form States
-  const [transferData, setTransferData] = useState({ productId: '', from: WarehouseType.GODOWN, to: WarehouseType.DISPLAY, qty: 0, date: new Date().toISOString().split('T')[0] });
+  const [transferData, setTransferData] = useState({ productId: '', from: WarehouseType.GODOWN, to: WarehouseType.DISPLAY, qty: 0, date: new Date().toISOString().split('T')[0], remarks: '' });
   const [receiptData, setReceiptData] = useState({ productId: '', warehouse: WarehouseType.GODOWN, qty: 0, date: new Date().toISOString().split('T')[0], supplier: '', remarks: '', staff: user?.name || '' });
   const [deliveryData, setDeliveryData] = useState({ productId: '', warehouse: WarehouseType.GODOWN, qty: 0, date: new Date().toISOString().split('T')[0], customer: '', rep: user?.name || '', remarks: '' });
 
   const brands = useMemo(() => ['All Brands', ...new Set(products.map(p => p.brand))].sort(), [products]);
+  const categories = useMemo(() => ['All Categories', ...new Set(products.map(p => p.category))].sort(), [products]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -130,16 +133,19 @@ const InventoryPage: React.FC = () => {
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.modelNo.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesBrand = selectedBrand === 'All Brands' || p.brand === selectedBrand;
-      
+      const matchesCategory = selectedCategory === 'All Categories' || p.category === selectedCategory;
+      const stocks = getProductStock(p.id);
+      const matchesWarehouse = selectedWarehouse === 'All' || (stocks.find(st => st.warehouse === selectedWarehouse)?.quantity || 0) > 0;
+
       const total = getTotalStock(p.id);
       let matchesStatus = true;
       if (statusFilter === 'In Stock') matchesStatus = total > 0;
       else if (statusFilter === 'Out of Stock') matchesStatus = total === 0;
       else if (statusFilter === 'Low Stock') matchesStatus = total > 0 && total < 10;
 
-      return matchesSearch && matchesBrand && matchesStatus;
+      return matchesSearch && matchesBrand && matchesCategory && matchesWarehouse && matchesStatus;
     });
-  }, [products, searchTerm, selectedBrand, statusFilter, getTotalStock]);
+  }, [products, searchTerm, selectedBrand, selectedCategory, selectedWarehouse, statusFilter, getTotalStock, getProductStock]);
 
   const unifiedHistory = useMemo(() => {
     const events: TransactionEvent[] = [];
@@ -149,7 +155,7 @@ const InventoryPage: React.FC = () => {
         id: t.id,
         date: t.date,
         type: 'TRANSFER',
-        reference: 'Internal Move',
+        reference: t.remarks?.trim() ? `Internal Move • ${t.remarks}` : 'Internal Move',
         from: t.sourceWarehouse,
         to: t.destinationWarehouse,
         qtyChange: t.quantity,
@@ -215,12 +221,57 @@ const InventoryPage: React.FC = () => {
     }).filter(row => row.totalQty > 0);
   }, [products, getProductStock]);
 
+
+  const bookedItemsData = useMemo(() => {
+    return products
+      .map((p) => {
+        const bookedQty = getProductStock(p.id).find(s => s.warehouse === WarehouseType.BOOKED)?.quantity || 0;
+        return { product: p, bookedQty };
+      })
+      .filter(item => item.bookedQty > 0 && (
+        !bookedSearch.trim() ||
+        item.product.name.toLowerCase().includes(bookedSearch.toLowerCase()) ||
+        item.product.modelNo.toLowerCase().includes(bookedSearch.toLowerCase())
+      ));
+  }, [products, getProductStock, bookedSearch]);
+
+  const handleExportHistory = () => {
+    const rows = unifiedHistory.map((evt) => ({
+      Date: evt.date,
+      Event: evt.type,
+      Product: evt.productName || '-',
+      Movement: evt.qtyChange,
+      Route: `${evt.from || '-'} -> ${evt.to || '-'}`,
+      Auditor: evt.performedBy || '-'
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'History');
+    XLSX.writeFile(wb, `inventory-history-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handleExportBooked = () => {
+    const rows = bookedItemsData.map(({ product, bookedQty }) => ({
+      Product: product.name,
+      SKU: product.modelNo,
+      Brand: product.brand,
+      Category: product.category,
+      BookedQty: bookedQty,
+      Warehouse: WarehouseType.BOOKED,
+      Context: 'System Booked Stock'
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Booked_Items');
+    XLSX.writeFile(wb, `inventory-booked-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const handleTransfer = (e: React.FormEvent) => {
     e.preventDefault();
     if (!transferData.productId || transferData.qty <= 0) return alert("Select product and valid quantity");
-    if (transferStock(transferData.productId, transferData.from, transferData.to, transferData.qty, { date: transferData.date })) {
+    if (transferStock(transferData.productId, transferData.from, transferData.to, transferData.qty, { date: transferData.date, remarks: transferData.remarks })) {
       alert("Transfer authorized successfully.");
-      setTransferData({ ...transferData, qty: 0, productId: '' });
+      setTransferData({ ...transferData, qty: 0, productId: '', remarks: '' });
     } else {
       alert("Insufficient stock in source warehouse.");
     }
@@ -296,6 +347,9 @@ const InventoryPage: React.FC = () => {
                </select>
                <select value={selectedBrand} onChange={e => setSelectedBrand(e.target.value)} className="py-2.5 px-4 text-xs border border-slate-200 rounded-xl bg-slate-50 font-black uppercase outline-none">
                   {brands.map(b => <option key={b} value={b}>{b}</option>)}
+               </select>
+               <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="py-2.5 px-4 text-xs border border-slate-200 rounded-xl bg-slate-50 font-black uppercase outline-none">
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
                </select>
                <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className="py-2.5 px-4 text-xs border border-slate-200 rounded-xl bg-slate-50 font-black uppercase outline-none">
                   <option value="All">All Status</option>
@@ -387,6 +441,18 @@ const InventoryPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          <div className="hidden" aria-hidden>
+            <InventoryStockDocument
+              company={activeCompany}
+              products={filteredProducts}
+              warehouseFilter={selectedWarehouse}
+              getStockFn={(id, wh) => getProductStock(id).find(s => s.warehouse === wh)?.quantity || 0}
+              getTotalStockFn={getTotalStock}
+              getSellableStockFn={getSellableStock}
+              user={user?.name || 'System'}
+            />
+          </div>
         </div>
       )}
 
@@ -405,6 +471,7 @@ const InventoryPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-6">
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Quantity</label><input required type="number" value={transferData.qty || ''} onChange={e => setTransferData({...transferData, qty: Number(e.target.value)})} className="w-full px-5 py-3 bg-slate-50 border rounded-2xl font-black text-lg outline-none focus:ring-2 focus:ring-indigo-500" /></div>
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Transfer Date</label><input required type="date" value={transferData.date} onChange={e => setTransferData({...transferData, date: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border rounded-2xl font-black text-xs outline-none focus:ring-2 focus:ring-indigo-500" /></div>
+                <div className="md:col-span-2"><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Remarks</label><input type="text" placeholder="Reason / note for this movement" value={transferData.remarks} onChange={e => setTransferData({...transferData, remarks: e.target.value})} className="w-full px-5 py-3 bg-slate-50 border rounded-2xl font-bold text-xs outline-none focus:ring-2 focus:ring-indigo-500" /></div>
               </div>
               <button type="submit" className="w-full py-5 bg-indigo-600 text-white font-black rounded-3xl shadow-xl uppercase tracking-widest text-[11px] hover:bg-indigo-700 active:scale-95 transition-all">Authorize Transfer</button>
            </form>
@@ -571,7 +638,12 @@ const InventoryPage: React.FC = () => {
       )}
 
       {activeTab === 'history' && (
-        <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
+        <div className="space-y-4 animate-in fade-in duration-300">
+           <div className="flex justify-end gap-2 no-print">
+              <button onClick={() => triggerStandalonePrint('printable-inventory-history', 'Inventory_History_Report')} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Print</button>
+              <button onClick={handleExportHistory} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Export</button>
+           </div>
+        <div id="printable-inventory-history" className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
            <table className="w-full text-sm text-left">
               <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
                  <tr><th className="px-10 py-5">Date</th><th className="px-6 py-5">Event</th><th className="px-6 py-5">SKU / Product</th><th className="px-6 py-5 text-center">Movement</th><th className="px-6 py-5">Route</th><th className="px-8 py-5 text-right">Auditor</th></tr>
@@ -590,22 +662,40 @@ const InventoryPage: React.FC = () => {
               </tbody>
            </table>
         </div>
+        </div>
       )}
 
-      {/* Booked Tab Remains Identical */}
+      {/* Booked Tab */}
       {activeTab === 'booked' && (
         <div className="space-y-6 animate-in fade-in duration-500">
-           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4">
-              <input type="text" placeholder="Search product..." className="flex-1 py-2.5 px-4 text-xs border border-slate-200 rounded-xl outline-none" />
+           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4 no-print">
+              <input type="text" value={bookedSearch} onChange={e => setBookedSearch(e.target.value)} placeholder="Search product..." className="flex-1 py-2.5 px-4 text-xs border border-slate-200 rounded-xl outline-none" />
+              <div className="flex gap-2">
+                 <button onClick={() => triggerStandalonePrint('printable-inventory-booked', 'Booked_Items_Report')} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Print</button>
+                 <button onClick={handleExportBooked} className="px-4 py-2 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50">Export</button>
+              </div>
            </div>
-           <div className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
+           <div id="printable-inventory-booked" className="bg-white rounded-[40px] border border-slate-200 shadow-sm overflow-hidden">
               <table className="w-full text-sm text-left">
                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
                     <tr><th className="px-10 py-5">Product Info</th><th className="px-6 py-5 text-center">Qty</th><th className="px-6 py-5">Party Details</th><th className="px-6 py-5 text-center">Warehouse</th><th className="px-8 py-5 text-right">Booking Context</th></tr>
                  </thead>
                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {/* Simplified for view as requested - logic stays same */}
-                    <tr><td colSpan={5} className="py-24 text-center text-slate-300 uppercase font-black italic">Navigate to Stock tab to see expansions or verify Booked Items logic</td></tr>
+                    {bookedItemsData.map(({ product, bookedQty }) => (
+                      <tr key={product.id} className="hover:bg-slate-50">
+                        <td className="px-10 py-5">
+                          <p className="font-black text-slate-800 uppercase text-xs">{product.name}</p>
+                          <p className="text-[10px] font-mono font-bold text-slate-400">{product.modelNo} • {product.brand}</p>
+                        </td>
+                        <td className="px-6 py-5 text-center font-black text-slate-900">{bookedQty}</td>
+                        <td className="px-6 py-5 text-xs font-bold text-slate-400 uppercase">SYSTEM</td>
+                        <td className="px-6 py-5 text-center text-[10px] font-black text-amber-600 uppercase">BOOKED</td>
+                        <td className="px-8 py-5 text-right text-[10px] font-black text-slate-500 uppercase">System Booked Stock</td>
+                      </tr>
+                    ))}
+                    {bookedItemsData.length === 0 && (
+                      <tr><td colSpan={5} className="py-24 text-center text-slate-300 uppercase font-black italic">No booked items found for current search.</td></tr>
+                    )}
                  </tbody>
               </table>
            </div>

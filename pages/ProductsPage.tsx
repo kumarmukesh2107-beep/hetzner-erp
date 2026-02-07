@@ -5,6 +5,8 @@ import { useCompany } from '../context/CompanyContext';
 import { useAuth } from '../context/AuthContext';
 import { Product, UserRole, ProductCategory, WarehouseType } from '../types';
 import * as XLSX from 'xlsx';
+import { triggerStandalonePrint } from '../utils/printService';
+import ProductMasterDocument from '../components/Print/ProductMasterDocument';
 
 const INITIAL_FORM_DATA: Partial<Product> = {
   name: '',
@@ -318,6 +320,34 @@ const ProductsPage: React.FC = () => {
      setIsDetailModalOpen(true);
   };
 
+  const handleExportProducts = () => {
+    const rows = filteredProducts.map((product) => ({
+      Name: product.name,
+      SKU: product.modelNo,
+      Brand: product.brand,
+      Category: product.category,
+      Range: product.range,
+      'Sales Price': product.salesPrice,
+      Cost: product.cost,
+      Unit: product.unit,
+      'Track Inventory': product.trackInventory ? 'Yes' : 'No',
+      'Net Stock': getTotalStock(product.id)
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+    XLSX.writeFile(wb, `products-master-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handlePrintProducts = () => {
+    triggerStandalonePrint('printable-products-table', 'Products_Master_List', 'landscape');
+  };
+
+  const handlePrintCatalogue = () => {
+    triggerStandalonePrint('printable-product-master', 'Products_Catalogue', 'portrait');
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
@@ -349,7 +379,16 @@ const ProductsPage: React.FC = () => {
                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
              </div>
+             <div className="w-40">
+                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Brand</label>
+                <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} className="w-full py-2 px-3 text-xs border border-slate-200 rounded-xl bg-slate-50 font-black uppercase outline-none">
+                   {brands.map(b => <option key={b} value={b}>{b === 'All' ? 'All Brands' : b}</option>)}
+                </select>
+             </div>
              <div className="flex gap-2 self-end">
+                <button onClick={handlePrintProducts} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50 tracking-widest transition-all">Print</button>
+                <button onClick={handleExportProducts} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50 tracking-widest transition-all">Export</button>
+                <button onClick={handlePrintCatalogue} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50 tracking-widest transition-all">Catalogue</button>
                 <button onClick={() => { setEditingProduct(null); setFormData(INITIAL_FORM_DATA); setShowForm(true); }} className="px-6 py-2.5 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-indigo-700 shadow-xl tracking-widest transition-all">Add Single SKU</button>
              </div>
           </div>
@@ -357,7 +396,7 @@ const ProductsPage: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 font-black uppercase text-[10px] tracking-widest border-b">
+                <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 font-black uppercase text-[10px] tracking-widest border-b shadow-[0_1px_0_0_rgba(148,163,184,0.2)]">
                   <tr>
                     <th className="px-6 py-4">Descriptor</th>
                     <th className="px-6 py-4">Brand / SKU</th>
@@ -406,6 +445,39 @@ const ProductsPage: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          <div id="printable-products-table" className="hidden" aria-hidden>
+            <div className="bg-white p-10">
+              <h2 className="text-xl font-black uppercase mb-2">Products Master List</h2>
+              <p className="text-xs font-bold text-slate-500 uppercase mb-6">Generated: {new Date().toLocaleString()} • Records: {filteredProducts.length}</p>
+              <table className="w-full text-sm text-left border border-slate-200 border-collapse">
+                <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] font-black">
+                  <tr>
+                    <th className="px-3 py-2 border">Descriptor</th>
+                    <th className="px-3 py-2 border">Brand / SKU</th>
+                    <th className="px-3 py-2 border">Group</th>
+                    <th className="px-3 py-2 border text-right">Valuation</th>
+                    <th className="px-3 py-2 border text-center">Net Stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.map((product) => (
+                    <tr key={`print-${product.id}`} className="border-b">
+                      <td className="px-3 py-2 border font-bold uppercase">{product.name}<div className="text-[10px] text-slate-400">{product.range}</div></td>
+                      <td className="px-3 py-2 border"><div className="font-black text-indigo-600">{product.brand}</div><div className="text-[10px] text-slate-500">{product.modelNo}</div></td>
+                      <td className="px-3 py-2 border text-[11px] font-black uppercase">{product.category}</td>
+                      <td className="px-3 py-2 border text-right font-black">₹{product.salesPrice.toLocaleString()}</td>
+                      <td className="px-3 py-2 border text-center font-black">{getTotalStock(product.id)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="hidden" aria-hidden>
+            <ProductMasterDocument company={activeCompany} products={filteredProducts} showCost={false} />
           </div>
         </div>
       )}

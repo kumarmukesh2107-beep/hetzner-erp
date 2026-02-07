@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { usePurchase } from '../context/PurchaseContext';
 import { useCompany } from '../context/CompanyContext';
+import { useAccounting } from '../context/AccountingContext';
 import { useContacts } from '../context/ContactContext';
 import { PurchaseStatus, PaymentStatus, PurchaseTransaction, WarehouseType } from '../types';
 import NewPurchasePage from './NewPurchasePage';
@@ -29,14 +30,19 @@ const PurchaseDetailModal: React.FC<{
   onClose: () => void; 
   onEdit: (p: PurchaseTransaction) => void;
 }> = ({ purchase, onClose, onEdit }) => {
-  const { confirmPO, recordGRN, createVendorBill, suppliers } = usePurchase();
+  const { confirmPO, recordGRN, createVendorBill, recordPurchasePayment, reconcileVendorAdvance, suppliers } = usePurchase();
   const { activeCompany } = useCompany();
+  const { accounts } = useAccounting();
   const { getContactById } = useContacts();
   
   const [grnInputs, setGrnInputs] = useState<Record<string, number>>({});
   const [grnRef, setGrnRef] = useState('');
   const [billNo, setBillNo] = useState('');
   const [billInputs, setBillInputs] = useState<Record<string, number>>({});
+  const [paymentAmount, setPaymentAmount] = useState(0);
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+  const [paymentRef, setPaymentRef] = useState('');
+  const [advanceAdjustAmount, setAdvanceAdjustAmount] = useState(0);
 
   const supplier = useMemo(() => {
     return suppliers.find(s => s.id === purchase.contactId) || getContactById(purchase.contactId);
@@ -53,6 +59,23 @@ const PurchaseDetailModal: React.FC<{
       setGrnInputs({});
       alert("Inventory Inbound Complete.");
     }
+  };
+
+
+  const handlePayment = () => {
+    if (!paymentAmount || paymentAmount <= 0) return alert('Enter payment amount');
+    if (!paymentAccountId) return alert('Select payment account');
+    recordPurchasePayment(purchase.id, paymentAmount, paymentAccountId, paymentRef || `PAY-${Date.now().toString().slice(-6)}`);
+    alert('Vendor payment recorded.');
+    setPaymentAmount(0);
+    setPaymentRef('');
+  };
+
+  const handleMapAdvance = () => {
+    if (!advanceAdjustAmount || advanceAdjustAmount <= 0) return alert('Enter advance amount');
+    reconcileVendorAdvance(purchase.id, advanceAdjustAmount);
+    alert('Vendor advance mapped.');
+    setAdvanceAdjustAmount(0);
   };
 
   const handleBill = () => {
@@ -161,6 +184,22 @@ const PurchaseDetailModal: React.FC<{
                        ))}
                     </div>
                     <button onClick={handleBill} className="w-full py-4 bg-indigo-600 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-lg shadow-indigo-100">Register Purchase Bill</button>
+                 </div>
+              )}
+
+              {(purchase.status === PurchaseStatus.BILLED || purchase.paymentStatus === PaymentStatus.PARTIAL) && (
+                 <div className="bg-white p-8 rounded-[32px] border border-slate-200 shadow-sm space-y-6">
+                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest border-b pb-4">Vendor Payment & Advance Mapping</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <input type="number" value={paymentAmount || ''} onChange={e => setPaymentAmount(Number(e.target.value))} placeholder="Payment Amount" className="px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" />
+                      <select value={paymentAccountId} onChange={e => setPaymentAccountId(e.target.value)} className="px-4 py-2 bg-slate-50 border rounded-xl text-xs font-black"><option value="">Select Account</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+                      <input type="text" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} placeholder="Reference" className="px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" />
+                    </div>
+                    <button onClick={handlePayment} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl uppercase tracking-widest text-[10px]">Record Vendor Payment</button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <input type="number" value={advanceAdjustAmount || ''} onChange={e => setAdvanceAdjustAmount(Number(e.target.value))} placeholder="Adjust Vendor Advance" className="px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" />
+                      <button onClick={handleMapAdvance} className="py-2 bg-amber-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px]">Map Existing Advance</button>
+                    </div>
                  </div>
               )}
            </div>

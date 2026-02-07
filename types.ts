@@ -129,6 +129,7 @@ export interface StockTransfer {
   date: string; 
   partyName?: string; 
   salesPerson?: string; 
+  remarks?: string;
 }
 
 export interface ManualTransaction {

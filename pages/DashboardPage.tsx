@@ -98,7 +98,7 @@ const DashboardPage: React.FC = () => {
               </svg>
             </div>
             <h4 className="text-lg md:text-xl font-black text-slate-800 uppercase tracking-tight">System Operational</h4>
-            <p className="text-xs md:text-sm text-slate-500 max-w-md mt-2">Detailed inventory reports have been migrated to the <strong>Inventory > Reports</strong> tab. Use the sidebar to navigate to specific modules.</p>
+            <p className="text-xs md:text-sm text-slate-500 max-w-md mt-2">Detailed inventory reports have been migrated to the <strong>Inventory &gt; Reports</strong> tab. Use the sidebar to navigate to specific modules.</p>
           </div>
         </div>
 
