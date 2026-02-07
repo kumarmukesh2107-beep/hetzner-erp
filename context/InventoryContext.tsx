@@ -198,7 +198,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
 
     const mapVal = (row: any, keys: string[]) => {
-      const foundKey = Object.keys(row).find(k => keys.includes(k.toLowerCase().replace(/[\s*_]/g, '')));
+      const normalizeHeader = (val: string) => val.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normalizedTargets = keys.map(normalizeHeader);
+      const foundKey = Object.keys(row).find(k => normalizedTargets.includes(normalizeHeader(k)));
       return foundKey ? row[foundKey] : undefined;
     };
 
@@ -248,7 +250,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         return;
       }
 
-      const excelCategoryRaw = mapVal(row, ['category', 'group', 'type']);
+      const excelCategoryRaw = mapVal(row, ['category', 'group', 'type', 'categorygroup', 'productcategory', 'productgroup']);
       const categoryNormalized = normalizeValue(excelCategoryRaw).replace(/\s+/g, ' ').trim();
       const categoryKey = normalizeCategoryKey(categoryNormalized);
       let finalCategory = '';
@@ -306,9 +308,9 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const nextStocks = [...allStocks];
 
     const mapVal = (row: any, keys: string[]) => {
-      const foundKey = Object.keys(row).find(k => 
-        keys.includes(k.toLowerCase().replace(/[\s*_]/g, ''))
-      );
+      const normalizeHeader = (val: string) => val.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const normalizedTargets = keys.map(normalizeHeader);
+      const foundKey = Object.keys(row).find(k => normalizedTargets.includes(normalizeHeader(k)));
       return foundKey ? row[foundKey] : undefined;
     };
 
