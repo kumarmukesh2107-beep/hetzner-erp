@@ -318,6 +318,30 @@ const ProductsPage: React.FC = () => {
      setIsDetailModalOpen(true);
   };
 
+  const handleExportProducts = () => {
+    const rows = filteredProducts.map((product) => ({
+      Name: product.name,
+      SKU: product.modelNo,
+      Brand: product.brand,
+      Category: product.category,
+      Range: product.range,
+      'Sales Price': product.salesPrice,
+      Cost: product.cost,
+      Unit: product.unit,
+      'Track Inventory': product.trackInventory ? 'Yes' : 'No',
+      'Net Stock': getTotalStock(product.id)
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+    XLSX.writeFile(wb, `products-master-${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const handlePrintProducts = () => {
+    window.print();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
@@ -350,6 +374,8 @@ const ProductsPage: React.FC = () => {
                 </select>
              </div>
              <div className="flex gap-2 self-end">
+                <button onClick={handlePrintProducts} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50 tracking-widest transition-all">Print</button>
+                <button onClick={handleExportProducts} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-600 text-[10px] font-black uppercase rounded-xl hover:bg-slate-50 tracking-widest transition-all">Export</button>
                 <button onClick={() => { setEditingProduct(null); setFormData(INITIAL_FORM_DATA); setShowForm(true); }} className="px-6 py-2.5 bg-indigo-600 text-white text-[10px] font-black uppercase rounded-xl hover:bg-indigo-700 shadow-xl tracking-widest transition-all">Add Single SKU</button>
              </div>
           </div>
@@ -357,7 +383,7 @@ const ProductsPage: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 font-black uppercase text-[10px] tracking-widest border-b">
+                <thead className="sticky top-0 z-20 bg-slate-50 text-slate-500 font-black uppercase text-[10px] tracking-widest border-b shadow-[0_1px_0_0_rgba(148,163,184,0.2)]">
                   <tr>
                     <th className="px-6 py-4">Descriptor</th>
                     <th className="px-6 py-4">Brand / SKU</th>
