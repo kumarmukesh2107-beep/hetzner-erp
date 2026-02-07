@@ -16,6 +16,13 @@ const PayrollProcess: React.FC = () => {
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+  const geminiApiKey =
+    process.env.API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    import.meta.env.VITE_GEMINI_API_KEY ||
+    import.meta.env.VITE_API_KEY ||
+    '';
+
   const mapMonthName = (extracted: string): string => {
     const monthMap: Record<string, string> = {
       'JAN': 'January', 'FEB': 'February', 'MAR': 'March', 'APR': 'April', 'MAY': 'May', 'JUN': 'June',
@@ -98,26 +105,50 @@ const PayrollProcess: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsUploading(true);
-    
+
+    const resolveMimeType = () => {
+      if (file.type) return file.type;
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.endsWith('.pdf')) return 'application/pdf';
+      if (lowerName.endsWith('.png')) return 'image/png';
+      if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg';
+      if (lowerName.endsWith('.webp')) return 'image/webp';
+      return 'application/pdf';
+    };
+
     try {
-      const base64Data = await new Promise<string>((resolve) => {
+      const mimeType = resolveMimeType();
+      const base64Data = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.readAsArrayBuffer(file);
+        reader.onload = () => {
+          const bytes = new Uint8Array(reader.result as ArrayBuffer);
+          let binary = '';
+          bytes.forEach(byte => {
+            binary += String.fromCharCode(byte);
+          });
+          resolve(btoa(binary));
+        };
+        reader.onerror = () => reject(new Error('Failed to read uploaded file.'));
       });
 
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      if (!geminiApiKey) {
+        throw new Error('Missing Gemini API key. Configure GEMINI_API_KEY (or API_KEY / VITE_GEMINI_API_KEY) in deployment environment.');
+      }
+
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey });
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-2.5-flash',
         contents: [{
           role: 'user',
           parts: [
-            { inlineData: { mimeType: file.type || 'image/jpeg', data: base64Data } },
+            { inlineData: { mimeType, data: base64Data } },
             { text: `CRITICAL EXTRACTION RULES:
               1. Identify the Report Month and Year.
               2. Extract ALL employees. For each, identify Code, Name, Total Present, Total Absent.
               3. Extract DAY-WISE Logs. IMPORTANT: The "date" field in dailyEntries MUST be in "YYYY-MM-DD" format based on the report period.
-              4. For each daily log, extract Status (P/A/WO/H) and In Time (HH:mm).` }
+              4. For each daily log, extract Status (P/A/WO/H) and In Time (HH:mm).
+              5. This input can be PDF or image; extract from tabular attendance/biometric data exactly.` }
           ]
         }],
         config: {
@@ -136,16 +167,16 @@ const PayrollProcess: React.FC = () => {
                     name: { type: Type.STRING },
                     present: { type: Type.NUMBER },
                     absent: { type: Type.NUMBER },
-                    dailyEntries: { 
-                      type: Type.ARRAY, 
-                      items: { 
-                        type: Type.OBJECT, 
-                        properties: { 
-                          date: { type: Type.STRING, description: "Formatted as YYYY-MM-DD" }, 
-                          status: { type: Type.STRING }, 
-                          inTime: { type: Type.STRING } 
-                        } 
-                      } 
+                    dailyEntries: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          date: { type: Type.STRING, description: "Formatted as YYYY-MM-DD" },
+                          status: { type: Type.STRING },
+                          inTime: { type: Type.STRING }
+                        }
+                      }
                     }
                   }
                 }
@@ -156,17 +187,22 @@ const PayrollProcess: React.FC = () => {
       });
 
       const result = JSON.parse(response.text || '{}');
+      if (!Array.isArray(result.employees)) {
+        throw new Error('No employee records could be extracted from the uploaded report.');
+      }
+
       const finalMonth = mapMonthName(result.detectedMonth || selectedMonth);
       const finalYear = result.detectedYear || selectedYear;
 
       setSelectedMonth(finalMonth);
       setSelectedYear(finalYear);
-      
+
       processBiometricData(finalMonth, finalYear, result.employees || []);
       alert(`Successfully scanned ${result.employees?.length || 0} employee records for ${finalMonth} ${finalYear}.`);
     } catch (error) {
       console.error(error);
-      alert('AI Processing failed. Please check the image quality.');
+      const message = error instanceof Error ? error.message : 'AI processing failed.';
+      alert(`Biometric report processing failed: ${message}`);
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
