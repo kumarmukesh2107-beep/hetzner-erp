@@ -101,6 +101,7 @@ export interface Product {
   modelNo: string;
   brand: string;
   category: string;
+  color?: string;
   range: string;
   salesPrice: number;
   cost: number;

@@ -336,6 +336,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         modelNo,
         brand: String(mapVal(row, ['brand', 'make']) || (existingIdx > -1 ? nextProducts[existingIdx].brand : 'UNBRANDED')).trim().toUpperCase(),
         category: finalCategory,
+        color: String(mapVal(row, ['color', 'colour', 'shade']) || (existingIdx > -1 ? (nextProducts[existingIdx].color || '') : 'NA')).trim().toUpperCase(),
         range: String(mapVal(row, ['range', 'collection']) || (existingIdx > -1 ? nextProducts[existingIdx].range : 'REGULAR')).trim().toUpperCase(),
         salesPrice: sPrice,
         cost: cPrice,
