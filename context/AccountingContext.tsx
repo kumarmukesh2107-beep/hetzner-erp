@@ -1,7 +1,8 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { AccountType, FinancialAccount, ExpenseRecord, LedgerEntry, TransactionType, Product } from '../types';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface CashFlowBreakdown {
   category: string;
@@ -44,6 +45,7 @@ interface AccountingContextType {
 }
 
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
+const ACCOUNTING_STORAGE_KEY = 'nexus_accounting_state_v1';
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { activeCompany } = useCompany();
@@ -63,6 +65,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     'Diwali Bonus/Gift EXP', 'LABOUR & DELIVERY CHARGES EXP', 'PACKING MATERIAL EXP', 'Sales Commission Expense',
     'Stationary Expense', 'Travelling Expense'
   ]);
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(ACCOUNTING_STORAGE_KEY, null);
+    if (saved) {
+      if (Array.isArray(saved.ledger)) setAllLedger(saved.ledger);
+      if (Array.isArray(saved.expenses)) setAllExpenses(saved.expenses);
+      if (Array.isArray(saved.expenseCategories)) setExpenseCategories(saved.expenseCategories);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(ACCOUNTING_STORAGE_KEY, {
+      ledger: allLedger,
+      expenses: allExpenses,
+      expenseCategories,
+    });
+  }, [allLedger, allExpenses, expenseCategories, isHydrated]);
 
   const ledger = useMemo(() => allLedger.filter(l => l.companyId === activeCompany?.id), [allLedger, activeCompany]);
   const expenses = useMemo(() => allExpenses.filter(e => e.companyId === activeCompany?.id), [allExpenses, activeCompany]);

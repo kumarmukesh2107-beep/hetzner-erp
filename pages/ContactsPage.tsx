@@ -30,7 +30,7 @@ interface ValidatedRow {
 }
 
 const ContactsPage: React.FC = () => {
-  const { contacts, addContact, updateContact, getContactBalance, bulkImportContacts } = useContacts();
+  const { contacts, addContact, updateContact, getContactBalance, bulkImportContacts, getContactLedger, mergeContacts } = useContacts();
   const { user } = useAuth();
   
   const [activeTab, setActiveTab] = useState<'list' | 'import'>('list');
@@ -39,6 +39,7 @@ const ContactsPage: React.FC = () => {
 
   const [showForm, setShowForm] = useState(false);
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   
   // Import Wizard State
   const [importMode, setImportMode] = useState<'add_only' | 'add_update'>('add_only');
@@ -70,6 +71,28 @@ const ContactsPage: React.FC = () => {
       return matchesCategory && matchesSearch;
     });
   }, [contacts, filterCategory, searchTerm]);
+
+
+  const duplicateGroups = useMemo(() => {
+    const keyMap = new Map<string, Contact[]>();
+    contacts.forEach((c) => {
+      const nameKey = c.name.trim().toLowerCase();
+      const mobileKey = c.mobile.trim();
+      const key = mobileKey ? `mobile:${mobileKey}` : `name:${nameKey}`;
+      const arr = keyMap.get(key) || [];
+      arr.push(c);
+      keyMap.set(key, arr);
+    });
+    return Array.from(keyMap.values()).filter(group => group.length > 1);
+  }, [contacts]);
+
+  const mergeDuplicatePair = (primary: Contact, duplicate: Contact) => {
+    const ok = mergeContacts(primary.id, duplicate.id);
+    if (ok) {
+      alert(`Merged duplicate contact into ${primary.name}.`);
+      if (selectedContact?.id === duplicate.id) setSelectedContact(primary);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -228,6 +251,30 @@ const ContactsPage: React.FC = () => {
             </div>
           </div>
 
+          {duplicateGroups.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 md:p-5">
+              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Potential duplicate contacts detected</p>
+              <div className="space-y-2">
+                {duplicateGroups.map((group, idx) => {
+                  const [primary, ...dups] = group;
+                  return (
+                    <div key={`dup-${idx}`} className="bg-white rounded-xl border border-amber-100 p-3">
+                      <p className="text-xs font-black text-slate-700 uppercase">Primary: {primary.name} ({primary.mobile})</p>
+                      <div className="mt-2 space-y-1">
+                        {dups.map(dup => (
+                          <div key={dup.id} className="flex items-center justify-between text-[11px]">
+                            <span className="font-bold text-slate-500 uppercase">Duplicate: {dup.name} ({dup.mobile})</span>
+                            <button type="button" onClick={() => mergeDuplicatePair(primary, dup)} className="px-3 py-1 bg-amber-100 text-amber-700 rounded-lg font-black text-[9px] uppercase">Merge</button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm overflow-hidden no-print">
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left min-w-[800px]">
@@ -244,7 +291,7 @@ const ContactsPage: React.FC = () => {
                     {filteredContacts.map(c => {
                       const balance = getContactBalance(c.id);
                       return (
-                        <tr key={c.id} className="hover:bg-slate-50 transition-colors group">
+                        <tr key={c.id} onClick={() => setSelectedContact(c)} className="hover:bg-slate-50 transition-colors group cursor-pointer">
                           <td className="px-6 md:px-8 py-5">
                              <p className="font-black text-slate-800 uppercase text-xs truncate max-w-[150px]">{c.name}</p>
                              <p className="text-[10px] text-slate-400 font-bold mt-1 tracking-tighter">{c.mobile}</p>
@@ -265,7 +312,7 @@ const ContactsPage: React.FC = () => {
                              </p>
                           </td>
                           <td className="px-6 md:px-8 py-5 text-right">
-                             <button onClick={() => { setEditingContact(c); setFormData(c as any); setShowForm(true); }} className="text-indigo-600 font-black text-[9px] md:text-[10px] uppercase hover:underline">Modify</button>
+                             <button onClick={(e) => { e.stopPropagation(); setEditingContact(c); setFormData(c as any); setShowForm(true); }} className="text-indigo-600 font-black text-[9px] md:text-[10px] uppercase hover:underline">Modify</button>
                           </td>
                         </tr>
                       );
@@ -380,6 +427,45 @@ const ContactsPage: React.FC = () => {
                </div>
             </div>
           )}
+        </div>
+      )}
+
+
+      {selectedContact && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-3xl overflow-hidden">
+            <div className="px-8 py-5 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Contact Profile</h2>
+              <button onClick={() => setSelectedContact(null)} className="text-slate-400 hover:text-slate-700"><svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <div className="p-8 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div><p className="text-[10px] font-black text-slate-400 uppercase">Name</p><p className="text-sm font-black text-slate-800 uppercase">{selectedContact.name}</p></div>
+                <div><p className="text-[10px] font-black text-slate-400 uppercase">Mobile</p><p className="text-sm font-black text-indigo-600">{selectedContact.mobile}</p></div>
+                <div><p className="text-[10px] font-black text-slate-400 uppercase">Email</p><p className="text-sm font-bold text-slate-700">{selectedContact.email || 'N/A'}</p></div>
+                <div><p className="text-[10px] font-black text-slate-400 uppercase">GSTIN</p><p className="text-sm font-bold text-slate-700">{selectedContact.gstNo || 'N/A'}</p></div>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Address</p>
+                <p className="text-sm font-bold text-slate-700">{selectedContact.billingAddress || 'N/A'}</p>
+                <p className="text-xs text-slate-500 font-bold uppercase mt-1">{selectedContact.city || '-'}, {selectedContact.state || '-'}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Ledger Snapshot</p>
+                <div className="max-h-40 overflow-auto border border-slate-100 rounded-xl">
+                  <table className="w-full text-xs">
+                    <thead className="bg-slate-50 text-slate-400 uppercase text-[9px] font-black"><tr><th className="px-3 py-2 text-left">Date</th><th className="px-3 py-2 text-left">Ref</th><th className="px-3 py-2 text-right">Balance</th></tr></thead>
+                    <tbody>
+                      {getContactLedger(selectedContact.id).slice(0, 8).map((row: any, idx: number) => (
+                        <tr key={idx} className="border-t border-slate-100"><td className="px-3 py-2 font-bold">{row.date}</td><td className="px-3 py-2 font-bold">{row.reference || row.transactionId || '-'}</td><td className="px-3 py-2 text-right font-black">₹{Math.abs(row.runningBalance || 0).toLocaleString()}</td></tr>
+                      ))}
+                      {getContactLedger(selectedContact.id).length === 0 && <tr><td colSpan={3} className="px-3 py-4 text-center text-slate-400 italic">No ledger entries</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

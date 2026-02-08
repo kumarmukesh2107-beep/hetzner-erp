@@ -227,7 +227,8 @@ const PayrollProcess: React.FC = () => {
     const totalDeduction = attendanceDeduction + manualData.penaltyCRM + manualData.penaltySuperfone + manualData.penaltyDress + manualData.manualAdjustment;
     const netSalary = grossSalary - totalDeduction;
 
-    const bankAmount = emp.bankLimit && netSalary > emp.bankLimit ? emp.bankLimit : netSalary;
+    const bankCap = emp.bankLimit || 0;
+    const bankAmount = Math.min(netSalary, Math.max(0, bankCap));
     const pdcAmount = netSalary - bankAmount;
 
     const record: PayrollRecord = {
@@ -444,8 +445,14 @@ const PayrollProcess: React.FC = () => {
                     <div className="text-left">
                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Disbursal Breakup</p>
                        <div className="flex gap-4">
-                          <div className="text-[11px] font-black text-indigo-600">BANK: ₹{Math.min(showManualModal.bankLimit || 999999, Math.max(0, showManualModal.monthlySalary + manualData.incentive - manualData.penaltyCRM)).toLocaleString()}</div>
-                          <div className="text-[11px] font-black text-amber-600">PDC: ₹{Math.max(0, (showManualModal.monthlySalary + manualData.incentive - manualData.penaltyCRM) - (showManualModal.bankLimit || 999999)).toLocaleString()}</div>
+                          <div className="text-[11px] font-black text-indigo-600">BANK: ₹{Math.min(
+                            Math.max(0, (showManualModal.bankLimit || 0)),
+                            Math.max(0, showManualModal.monthlySalary + manualData.incentive + manualData.conveyance - manualData.penaltyCRM - manualData.penaltySuperfone - manualData.penaltyDress - manualData.manualAdjustment)
+                          ).toLocaleString()}</div>
+                          <div className="text-[11px] font-black text-amber-600">PDC: ₹{Math.max(0, Math.max(0, showManualModal.monthlySalary + manualData.incentive + manualData.conveyance - manualData.penaltyCRM - manualData.penaltySuperfone - manualData.penaltyDress - manualData.manualAdjustment) - Math.min(
+                            Math.max(0, (showManualModal.bankLimit || 0)),
+                            Math.max(0, showManualModal.monthlySalary + manualData.incentive + manualData.conveyance - manualData.penaltyCRM - manualData.penaltySuperfone - manualData.penaltyDress - manualData.manualAdjustment)
+                          )).toLocaleString()}</div>
                        </div>
                     </div>
                     <button type="submit" className="px-12 py-4 bg-indigo-600 text-white font-black text-[11px] uppercase tracking-widest rounded-2xl shadow-xl hover:bg-indigo-700 active:scale-95 transition-all">Save Payroll Entry</button>

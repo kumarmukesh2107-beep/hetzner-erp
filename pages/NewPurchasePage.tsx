@@ -27,6 +27,7 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
 
   const [vendorSearch, setVendorSearch] = useState('');
   const [vendorResults, setVendorResults] = useState<Contact[]>([]);
+  const [showVendorDropdown, setShowVendorDropdown] = useState(false);
 
   const [selProductId, setSelProductId] = useState('');
   const [qty, setQty] = useState(1);
@@ -47,10 +48,12 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
 
   const handleVendorSearch = (val: string) => {
     setVendorSearch(val);
-    if (val.length > 1) {
+    setShowVendorDropdown(true);
+    setContactId('');
+    if (val.length > 0) {
       setVendorResults(searchContacts(val, ContactType.SUPPLIER));
     } else {
-      setVendorResults([]);
+      setVendorResults(searchContacts('', ContactType.SUPPLIER).slice(0, 8));
     }
   };
 
@@ -73,6 +76,8 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
     setCost(0);
   };
 
+  const selectedVendor = useMemo(() => (contactId ? getContactById(contactId) : null), [contactId, getContactById]);
+
   const totals = useMemo(() => {
     return items.reduce((acc, it) => ({
       subtotal: acc.subtotal + (it.orderedQty * it.unitPrice),
@@ -81,14 +86,21 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
   }, [items]);
 
   const handleSubmit = () => {
-    if (!contactId || items.length === 0) return alert('Select vendor and add items');
+    let resolvedContactId = contactId;
+    if (!resolvedContactId && vendorSearch.trim()) {
+      const normalized = vendorSearch.trim().toLowerCase();
+      const match = searchContacts(vendorSearch, ContactType.SUPPLIER).find(c => c.name.toLowerCase() === normalized || c.mobile === vendorSearch.trim());
+      if (match) resolvedContactId = match.id;
+    }
+
+    if (!resolvedContactId || items.length === 0) return alert('Select vendor and add items');
     const payload = { 
       rfqNo, 
       purchaseNo: rfqNo,
       date, 
       expectedDeliveryDate, 
-      contactId, 
-      supplierId: contactId,
+      contactId: resolvedContactId, 
+      supplierId: resolvedContactId,
       warehouse, 
       items, 
       subtotal: totals.subtotal, 
@@ -116,16 +128,26 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="relative">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Supplier Selection</label>
-                <input type="text" value={vendorSearch} onChange={e => handleVendorSearch(e.target.value)} placeholder="Search vendor name..." className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600" />
-                {vendorResults.length > 0 && (
+                <input type="text" value={vendorSearch} onFocus={() => { setShowVendorDropdown(true); setVendorResults(searchContacts(vendorSearch, ContactType.SUPPLIER).slice(0, 8)); }} onBlur={() => setTimeout(() => setShowVendorDropdown(false), 120)} onChange={e => handleVendorSearch(e.target.value)} placeholder="Search vendor name / mobile..." className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600" />
+                {showVendorDropdown && vendorResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
-                    {vendorResults.map(v => <button key={v.id} type="button" onClick={() => { setContactId(v.id); setVendorSearch(v.name); setVendorResults([]); }} className="w-full px-5 py-3 text-left text-xs hover:bg-indigo-50 font-bold uppercase border-b border-slate-50">{v.name} ({v.mobile})</button>)}
+                    {vendorResults.map(v => <button key={v.id} type="button" onMouseDown={(e) => { e.preventDefault(); setContactId(v.id); setVendorSearch(v.name); setVendorResults([]); setShowVendorDropdown(false); }} className="w-full px-5 py-3 text-left text-xs hover:bg-indigo-50 font-bold uppercase border-b border-slate-50">{v.name} ({v.mobile})</button>)}
                   </div>
                 )}
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Issue Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs" /></div>
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Expect By</label><input type="date" value={expectedDeliveryDate} onChange={e => setExpectedDeliveryDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+              </div>
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Contact No.</p>
+                  <p className="text-xs font-black text-indigo-700">{selectedVendor?.mobile || 'N/A'}</p>
+                </div>
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Address</p>
+                  <p className="text-xs font-bold text-slate-700">{selectedVendor?.billingAddress || 'N/A'}</p>
+                </div>
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Target Warehouse</label>

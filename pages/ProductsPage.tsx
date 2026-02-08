@@ -7,12 +7,14 @@ import { Product, UserRole, ProductCategory, WarehouseType } from '../types';
 import * as XLSX from 'xlsx';
 import { triggerStandalonePrint } from '../utils/printService';
 import ProductMasterDocument from '../components/Print/ProductMasterDocument';
+import ProductTagDocument from '../components/Print/ProductTagDocument';
 
 const INITIAL_FORM_DATA: Partial<Product> = {
   name: '',
   modelNo: '',
   brand: '',
   category: '',
+  color: 'NA',
   range: '',
   salesPrice: 0,
   cost: 0,
@@ -81,6 +83,7 @@ const ProductDetailModal: React.FC<{ product: Product; isOpen: boolean; onClose:
              <div className="grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-[24px]">
                 <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Brand Identity</p><p className="font-bold text-slate-800 uppercase">{product.brand}</p></div>
                 <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Product Range</p><p className="font-bold text-slate-800 uppercase">{product.range}</p></div>
+                <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Colour</p><p className="font-bold text-slate-800 uppercase">{product.color || 'NA'}</p></div>
                 <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Standard Unit</p><p className="font-bold text-slate-800 uppercase">{product.unit}</p></div>
                 <div><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Inventory Mode</p><p className="font-bold text-emerald-600 uppercase">{product.trackInventory ? 'TRACKED' : 'NOT TRACKED'}</p></div>
              </div>
@@ -138,6 +141,7 @@ const ProductsPage: React.FC = () => {
   
   const [selectedProductForDetail, setSelectedProductForDetail] = useState<Product | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedProductForTag, setSelectedProductForTag] = useState<Product | null>(null);
 
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -296,6 +300,7 @@ const ProductsPage: React.FC = () => {
     const productToSave: Product = {
       ...formData as Product,
       id: editingProduct ? editingProduct.id : `${activeCompany?.id}-${formData.modelNo}`,
+      color: (formData.color || 'NA').toString().toUpperCase(),
       image: formData.image?.trim() || `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.name || 'P')}&background=random&size=200`
     };
     addProduct(productToSave);
@@ -326,6 +331,7 @@ const ProductsPage: React.FC = () => {
       SKU: product.modelNo,
       Brand: product.brand,
       Category: product.category,
+      Colour: product.color || 'NA',
       Range: product.range,
       'Sales Price': product.salesPrice,
       Cost: product.cost,
@@ -346,6 +352,11 @@ const ProductsPage: React.FC = () => {
 
   const handlePrintCatalogue = () => {
     triggerStandalonePrint('printable-product-master', 'Products_Catalogue', 'portrait');
+  };
+
+  const handlePrintTag = (product: Product) => {
+    setSelectedProductForTag(product);
+    setTimeout(() => triggerStandalonePrint('printable-product-tag', `Tag_${product.modelNo}`, 'portrait'), 60);
   };
 
   return (
@@ -435,6 +446,9 @@ const ProductsPage: React.FC = () => {
                         <td className="px-6 py-4 font-black text-slate-900 text-sm">₹{product.salesPrice.toLocaleString()}</td>
                         <td className="px-6 py-4 text-center font-black text-slate-900">{totalStock}</td>
                         <td className="px-6 py-4 text-right no-print">
+                          <button onClick={() => handlePrintTag(product)} className="p-2 hover:bg-emerald-50 text-emerald-600 rounded-lg" title="Print Tag">
+                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6M8 6h8m-9 14h10a2 2 0 002-2V6a2 2 0 00-2-2H7a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                          </button>
                           <button onClick={() => { setFormData(product); setEditingProduct(product); setShowForm(true); }} className="p-2 hover:bg-indigo-50 text-indigo-600 rounded-lg">
                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                           </button>
@@ -457,6 +471,7 @@ const ProductsPage: React.FC = () => {
                     <th className="px-3 py-2 border">Descriptor</th>
                     <th className="px-3 py-2 border">Brand / SKU</th>
                     <th className="px-3 py-2 border">Group</th>
+                    <th className="px-3 py-2 border">Colour</th>
                     <th className="px-3 py-2 border text-right">Valuation</th>
                     <th className="px-3 py-2 border text-center">Net Stock</th>
                   </tr>
@@ -467,6 +482,7 @@ const ProductsPage: React.FC = () => {
                       <td className="px-3 py-2 border font-bold uppercase">{product.name}<div className="text-[10px] text-slate-400">{product.range}</div></td>
                       <td className="px-3 py-2 border"><div className="font-black text-indigo-600">{product.brand}</div><div className="text-[10px] text-slate-500">{product.modelNo}</div></td>
                       <td className="px-3 py-2 border text-[11px] font-black uppercase">{product.category}</td>
+                      <td className="px-3 py-2 border text-[11px] font-black uppercase">{product.color || 'NA'}</td>
                       <td className="px-3 py-2 border text-right font-black">₹{product.salesPrice.toLocaleString()}</td>
                       <td className="px-3 py-2 border text-center font-black">{getTotalStock(product.id)}</td>
                     </tr>
@@ -478,6 +494,7 @@ const ProductsPage: React.FC = () => {
 
           <div className="hidden" aria-hidden>
             <ProductMasterDocument company={activeCompany} products={filteredProducts} showCost={false} />
+            {selectedProductForTag && <ProductTagDocument product={selectedProductForTag} />}
           </div>
         </div>
       )}
@@ -695,6 +712,7 @@ const ProductsPage: React.FC = () => {
                   </div>
                   <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Model No (Unique)</label><input required type="text" value={formData.modelNo} onChange={e => setFormData({...formData, modelNo: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-indigo-600 outline-none text-xs" /></div>
                   <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Brand</label><input required type="text" value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs uppercase" /></div>
+                  <div><label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Colour</label><input type="text" value={formData.color || ''} onChange={e => setFormData({...formData, color: e.target.value.toUpperCase()})} className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none text-xs uppercase" placeholder="NA" /></div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Product Group / Category</label>
                     <div className="flex gap-2">

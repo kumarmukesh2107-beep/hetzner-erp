@@ -1,8 +1,9 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Contact, ContactType, ContactCategory, CONTACT_CATEGORIES } from '../types';
 import { useAccounting } from './AccountingContext';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface ContactImportResult {
   success: number;
@@ -21,9 +22,11 @@ interface ContactContextType {
   searchContacts: (query: string, category?: ContactCategory) => Contact[];
   getContactBalance: (id: string) => number;
   getContactLedger: (id: string) => any[];
+  mergeContacts: (primaryId: string, duplicateId: string) => boolean;
 }
 
 const ContactContext = createContext<ContactContextType | undefined>(undefined);
+const CONTACT_STORAGE_KEY = 'nexus_contact_state_v1';
 
 export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { ledger } = useAccounting();
@@ -59,6 +62,22 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString()
     }
   ]);
+
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(CONTACT_STORAGE_KEY, null);
+    if (saved && Array.isArray(saved.contacts)) {
+      setAllContacts(saved.contacts);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(CONTACT_STORAGE_KEY, { contacts: allContacts });
+  }, [allContacts, isHydrated]);
 
   const contacts = useMemo(() => 
     allContacts.filter(c => c.companyId === activeCompany?.id), 
@@ -229,10 +248,41 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .reverse();
   }, [getContactById, ledger]);
 
+
+  const mergeContacts = useCallback((primaryId: string, duplicateId: string) => {
+    if (!activeCompany || primaryId === duplicateId) return false;
+
+    const primary = allContacts.find(c => c.id === primaryId && c.companyId === activeCompany.id);
+    const duplicate = allContacts.find(c => c.id === duplicateId && c.companyId === activeCompany.id);
+    if (!primary || !duplicate) return false;
+
+    const mergedTypes = Array.from(new Set([...(primary.contactTypes || []), ...(duplicate.contactTypes || [])])) as ContactCategory[];
+    const merged: Contact = {
+      ...primary,
+      name: primary.name || duplicate.name,
+      mobile: primary.mobile || duplicate.mobile,
+      email: primary.email || duplicate.email,
+      billingAddress: primary.billingAddress || duplicate.billingAddress,
+      shippingAddress: primary.shippingAddress || duplicate.shippingAddress,
+      city: primary.city || duplicate.city,
+      state: primary.state || duplicate.state,
+      gstNo: primary.gstNo || duplicate.gstNo,
+      openingBalance: (primary.openingBalance || 0) + (duplicate.openingBalance || 0),
+      contactTypes: mergedTypes.length > 0 ? mergedTypes : primary.contactTypes,
+      type: mergedTypes.includes('Supplier') ? ContactType.SUPPLIER : ContactType.CUSTOMER,
+    };
+
+    setAllContacts(prev => prev
+      .map(c => c.id === primaryId ? merged : c)
+      .filter(c => c.id !== duplicateId)
+    );
+    return true;
+  }, [activeCompany, allContacts]);
+
   return (
     <ContactContext.Provider value={{ 
       contacts, addContact, updateContact, bulkImportContacts, getContactById, getContactByMobile, 
-      searchContacts, getContactBalance, getContactLedger 
+      searchContacts, getContactBalance, getContactLedger, mergeContacts 
     }}>
       {children}
     </ContactContext.Provider>

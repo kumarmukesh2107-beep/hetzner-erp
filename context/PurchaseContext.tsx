@@ -1,9 +1,10 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Supplier, PurchaseTransaction, PurchaseStatus, PaymentStatus, WarehouseType, PurchaseItem, GRNRecord, VendorBillRecord, TransactionType } from '../types';
 import { useInventory } from './InventoryContext';
 import { useAccounting } from './AccountingContext';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface PurchaseContextType {
   suppliers: Supplier[];
@@ -23,6 +24,7 @@ interface PurchaseContextType {
 }
 
 const PurchaseContext = createContext<PurchaseContextType | undefined>(undefined);
+const PURCHASE_STORAGE_KEY = 'nexus_purchase_state_v1';
 
 export const PurchaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { increaseStock } = useInventory();
@@ -33,6 +35,22 @@ export const PurchaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     { id: 'sup1', companyId: 'comp-001', name: 'Global Tech Distribution', phone: '555-0199', email: 'sales@globaltech.com', address: '123 Tech Lane', gstNo: 'GST123', openingBalance: 0 }
   ]);
   const [allPurchases, setAllPurchases] = useState<PurchaseTransaction[]>([]);
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(PURCHASE_STORAGE_KEY, null);
+    if (saved) {
+      if (Array.isArray(saved.suppliers)) setAllSuppliers(saved.suppliers);
+      if (Array.isArray(saved.purchases)) setAllPurchases(saved.purchases);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(PURCHASE_STORAGE_KEY, { suppliers: allSuppliers, purchases: allPurchases });
+  }, [allSuppliers, allPurchases, isHydrated]);
 
   const suppliers = useMemo(() => 
     allSuppliers.filter(s => s.companyId === activeCompany?.id), 

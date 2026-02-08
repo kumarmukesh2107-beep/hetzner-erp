@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Company } from '../types';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface CompanyContextType {
   companies: Company[];
@@ -12,6 +13,7 @@ interface CompanyContextType {
 }
 
 const CompanyContext = createContext<CompanyContextType | undefined>(undefined);
+const COMPANY_STORAGE_KEY = 'nexus_company_state_v1';
 
 export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [companies, setCompanies] = useState<Company[]>([
@@ -66,6 +68,20 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   ]);
 
   const [activeCompanyId, setActiveCompanyId] = useState<string | null>(localStorage.getItem('nexus_active_company'));
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(COMPANY_STORAGE_KEY, null);
+    if (saved && Array.isArray(saved.companies)) {
+      setCompanies(saved.companies);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(COMPANY_STORAGE_KEY, { companies });
+  }, [companies, isHydrated]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PrintTemplate, PrintSettings } from '../types';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface SettingsContextType {
   templates: PrintTemplate[];
@@ -12,6 +13,7 @@ interface SettingsContextType {
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
+const SETTINGS_STORAGE_KEY = 'nexus_settings_state_v1';
 
 const DEFAULT_SETTINGS: PrintSettings = {
   primaryColor: '#4f46e5',
@@ -31,6 +33,7 @@ const DEFAULT_SETTINGS: PrintSettings = {
 export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { activeCompany } = useCompany();
   const [includeMigratedInData, setIncludeMigratedInData] = useState(false);
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   
   const [templates, setTemplates] = useState<PrintTemplate[]>([
     {
@@ -58,6 +61,23 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         settings: { ...DEFAULT_SETTINGS, showTerms: false, showBankDetails: false }
     }
   ]);
+
+
+  useEffect(() => {
+    const companyId = activeCompany?.id || 'global';
+    const saved = loadLocalState<any | null>(`${SETTINGS_STORAGE_KEY}_${companyId}`, null);
+    if (saved) {
+      if (Array.isArray(saved.templates)) setTemplates(saved.templates);
+      if (typeof saved.includeMigratedInData === 'boolean') setIncludeMigratedInData(saved.includeMigratedInData);
+    }
+    setSettingsHydrated(true);
+  }, [activeCompany?.id]);
+
+  useEffect(() => {
+    if (!settingsHydrated) return;
+    const companyId = activeCompany?.id || 'global';
+    saveLocalState(`${SETTINGS_STORAGE_KEY}_${companyId}`, { templates, includeMigratedInData });
+  }, [templates, includeMigratedInData, activeCompany?.id, settingsHydrated]);
 
   const updateTemplate = (id: string, newSettings: Partial<PrintSettings>) => {
     setTemplates(prev => prev.map(t => 
