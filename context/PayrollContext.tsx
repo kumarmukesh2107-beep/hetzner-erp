@@ -75,6 +75,19 @@ export const PayrollProvider: React.FC<{ children: React.ReactNode }> = ({ child
     });
   }, [allEmployees, allHolidays, allPayrollHistory, allDailyAttendance, isHydrated]);
 
+  // Normalize disbursal split: default all salary to PDC, only bankLimit-defined amounts go to bank transfer.
+  useEffect(() => {
+    if (!isHydrated) return;
+    setAllPayrollHistory(prev => prev.map(record => {
+      const emp = allEmployees.find(e => e.companyId === record.companyId && e.id === record.empCode);
+      const bankCap = emp?.bankLimit || 0;
+      const normalizedBank = Math.min(record.netSalary, Math.max(0, bankCap));
+      const normalizedPdc = record.netSalary - normalizedBank;
+      if (record.bankAmount === normalizedBank && record.pdcAmount === normalizedPdc) return record;
+      return { ...record, bankAmount: normalizedBank, pdcAmount: normalizedPdc };
+    }));
+  }, [allEmployees, isHydrated]);
+
   const employees = useMemo(() => 
     allEmployees.filter(e => e.companyId === activeCompany?.id), 
     [allEmployees, activeCompany]
@@ -212,7 +225,8 @@ export const PayrollProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const totalDeduction = attendanceDeduction + (block.penaltyCRM || 0) + (block.penaltySuperfone || 0) + (block.penaltyDress || 0) + (block.manualAdjustment || 0);
       const netSalary = grossSalary - totalDeduction;
 
-      const bankAmount = emp.bankLimit && netSalary > emp.bankLimit ? emp.bankLimit : netSalary;
+      const bankCap = emp.bankLimit || 0;
+      const bankAmount = Math.min(netSalary, Math.max(0, bankCap));
       const pdcAmount = netSalary - bankAmount;
 
       return {
@@ -237,7 +251,7 @@ export const PayrollProvider: React.FC<{ children: React.ReactNode }> = ({ child
         grossSalary,
         attendanceDeduction,
         penaltySuperfone: block.penaltySuperfone || 0,
-        penaltyDress: block.penaltySuperfone || 0,
+        penaltyDress: block.penaltyDress || 0,
         penaltyCRM: block.penaltyCRM || 0,
         manualAdjustment: block.manualAdjustment || 0,
         totalDeduction,
@@ -282,16 +296,82 @@ export const PayrollProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateDailyAttendance = useCallback((attendance: DailyAttendance) => {
     if (!activeCompany) return;
+
     setAllDailyAttendance(prev => {
-      // Ensure companyId is assigned so it doesn't get filtered out of the view
       const finalizedAttendance = { ...attendance, companyId: activeCompany.id, manualOverride: true };
       const exists = prev.some(a => a.id === finalizedAttendance.id);
-      if (exists) {
-        return prev.map(a => a.id === finalizedAttendance.id ? finalizedAttendance : a);
-      }
-      return [finalizedAttendance, ...prev];
+      const nextAttendance = exists
+        ? prev.map(a => a.id === finalizedAttendance.id ? finalizedAttendance : a)
+        : [finalizedAttendance, ...prev];
+
+      setAllPayrollHistory(prevPayroll => prevPayroll.map(record => {
+        if (
+          record.companyId !== activeCompany.id ||
+          record.empCode !== finalizedAttendance.empCode ||
+          record.month !== finalizedAttendance.month ||
+          record.year !== finalizedAttendance.year
+        ) {
+          return record;
+        }
+
+        const emp = allEmployees.find(e => e.companyId === activeCompany.id && e.id === record.empCode);
+        if (!emp) return record;
+
+        const monthlyEntries = nextAttendance.filter(a =>
+          a.companyId === activeCompany.id &&
+          a.empCode === record.empCode &&
+          a.month === record.month &&
+          a.year === record.year
+        );
+
+        const present = monthlyEntries.filter(a => a.status === AttendanceStatus.PRESENT).length;
+        const absent = monthlyEntries.filter(a => a.status === AttendanceStatus.ABSENT).length;
+        const halfDays = monthlyEntries.filter(a => a.status === AttendanceStatus.HALF_DAY).length;
+
+        let lateCount = 0;
+        monthlyEntries.forEach((entry) => {
+          if (entry.status !== AttendanceStatus.PRESENT || !entry.inTime || entry.inTime === '00:00' || entry.inTime === 'NS' || !emp.markLateTime) return;
+          const [inH, inM] = entry.inTime.split(':').map(Number);
+          const [limH, limM] = emp.markLateTime.split(':').map(Number);
+          if ((inH * 60 + inM) > (limH * 60 + limM)) lateCount++;
+        });
+
+        const workingDaysInMonth = 30;
+        const perDaySalary = emp.monthlySalary / workingDaysInMonth;
+        const netAbsent = Math.max(0, absent - record.weekOff);
+        const lateDeductionDays = lateCount <= 2 ? 0 : (lateCount - 2) * 0.5;
+        const totalDeductionDays = netAbsent + (halfDays * 0.5) + lateDeductionDays;
+        const attendanceDeduction = Math.round(totalDeductionDays * perDaySalary);
+
+        const extraDaysEarnings = Math.round((record.extraPaidDays || 0) * perDaySalary);
+        const grossSalary = Math.round(emp.monthlySalary + record.incentive + (record.conveyance || 0) + extraDaysEarnings);
+        const totalDeduction = attendanceDeduction + record.penaltyCRM + record.penaltySuperfone + record.penaltyDress + record.manualAdjustment;
+        const netSalary = grossSalary - totalDeduction;
+
+        const bankCap = emp.bankLimit || 0;
+        const bankAmount = Math.min(netSalary, Math.max(0, bankCap));
+        const pdcAmount = netSalary - bankAmount;
+
+        return {
+          ...record,
+          present,
+          absent,
+          halfDays,
+          lateCount,
+          lateDeductionDays,
+          attendanceDeduction,
+          grossSalary,
+          totalDeduction,
+          netSalary,
+          bankAmount,
+          pdcAmount,
+          processedAt: new Date().toISOString(),
+        };
+      }));
+
+      return nextAttendance;
     });
-  }, [activeCompany]);
+  }, [activeCompany, allEmployees]);
 
   return (
     <PayrollContext.Provider value={{ 

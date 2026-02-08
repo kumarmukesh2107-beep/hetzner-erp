@@ -33,7 +33,23 @@ const SalarySlips: React.FC = () => {
               border: none !important;
               background: white !important;
             }
-            .print-hidden, header, aside, button, .no-print {
+            .print-hidden, header, aside, .no-print {
+              display: none !important;
+            }
+            #salary-slip-modal {
+              position: static !important;
+              display: block !important;
+              background: white !important;
+              backdrop-filter: none !important;
+              padding: 0 !important;
+            }
+            #salary-slip-shell {
+              box-shadow: none !important;
+              border: none !important;
+              max-height: none !important;
+              border-radius: 0 !important;
+            }
+            #salary-slip-toolbar {
               display: none !important;
             }
           }
@@ -85,9 +101,9 @@ const SalarySlips: React.FC = () => {
       </div>
 
       {selectedSlip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm no-print">
-          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl overflow-hidden max-h-[95vh] flex flex-col scale-in">
-            <div className="px-8 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div id="salary-slip-modal" className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <div id="salary-slip-shell" className="bg-white rounded-[32px] shadow-2xl w-full max-w-3xl overflow-hidden max-h-[95vh] flex flex-col scale-in">
+            <div id="salary-slip-toolbar" className="px-8 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
               <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight">Salary Slip Preview</h2>
               <div className="flex gap-2">
                 <button 
@@ -176,7 +192,14 @@ const SalarySlips: React.FC = () => {
                  </div>
               </div>
 
-              <div className="mt-16 bg-slate-950 p-8 rounded-[32px] text-white shadow-2xl relative overflow-hidden">
+              {selectedSlip.remarks && (
+                <div className="mt-6 p-6 bg-slate-50 rounded-2xl border border-slate-200">
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Audit Remarks</p>
+                   <p className="text-xs text-slate-700 font-medium italic">"{selectedSlip.remarks}"</p>
+                </div>
+              )}
+
+              <div className="mt-10 bg-slate-950 p-8 rounded-[32px] text-white shadow-2xl relative overflow-hidden">
                 <div className="flex justify-between items-center mb-8 relative z-10">
                   <span className="text-xs font-black text-indigo-400 uppercase tracking-[0.2em]">Net Disbursal Amount</span>
                   <span className="text-5xl font-black tracking-tighter">₹{selectedSlip.netSalary.toLocaleString()}</span>
@@ -187,13 +210,6 @@ const SalarySlips: React.FC = () => {
                 </div>
                 <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full -mr-32 -mt-32 blur-3xl" />
               </div>
-
-              {selectedSlip.remarks && (
-                <div className="mt-10 p-6 bg-slate-50 rounded-2xl border border-slate-200">
-                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Audit Remarks</p>
-                   <p className="text-xs text-slate-700 font-medium italic">"{selectedSlip.remarks}"</p>
-                </div>
-              )}
 
               <div className="mt-20 flex justify-between">
                 <div className="text-center w-64 pt-6 border-t-2 border-slate-100">
