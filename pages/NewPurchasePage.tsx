@@ -73,6 +73,8 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
     setCost(0);
   };
 
+  const selectedVendor = useMemo(() => (contactId ? getContactById(contactId) : null), [contactId, getContactById]);
+
   const totals = useMemo(() => {
     return items.reduce((acc, it) => ({
       subtotal: acc.subtotal + (it.orderedQty * it.unitPrice),
@@ -116,7 +118,7 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="relative">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Supplier Selection</label>
-                <input type="text" value={vendorSearch} onChange={e => handleVendorSearch(e.target.value)} placeholder="Search vendor name..." className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600" />
+                <input type="text" value={vendorSearch} onChange={e => handleVendorSearch(e.target.value)} placeholder="Search vendor name / mobile..." className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600" />
                 {vendorResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
                     {vendorResults.map(v => <button key={v.id} type="button" onClick={() => { setContactId(v.id); setVendorSearch(v.name); setVendorResults([]); }} className="w-full px-5 py-3 text-left text-xs hover:bg-indigo-50 font-bold uppercase border-b border-slate-50">{v.name} ({v.mobile})</button>)}
@@ -126,6 +128,16 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Issue Date</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs" /></div>
                 <div><label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Expect By</label><input type="date" value={expectedDeliveryDate} onChange={e => setExpectedDeliveryDate(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+              </div>
+              <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Contact No.</p>
+                  <p className="text-xs font-black text-indigo-700">{selectedVendor?.mobile || 'N/A'}</p>
+                </div>
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Address</p>
+                  <p className="text-xs font-bold text-slate-700">{selectedVendor?.billingAddress || 'N/A'}</p>
+                </div>
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Target Warehouse</label>

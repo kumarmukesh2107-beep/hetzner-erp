@@ -28,6 +28,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
   const [state, setState] = useState('');
   const [isNewContact, setIsNewContact] = useState(false);
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
+  const [activeSearchField, setActiveSearchField] = useState<'name' | 'mobile' | null>(null);
   const [currentContactId, setCurrentContactId] = useState<string | null>(null);
 
   const [warehouse, setWarehouse] = useState<WarehouseType>(WarehouseType.GODOWN);
@@ -102,18 +103,31 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
 
   const handleMobileSearch = (val: string) => {
     setMobile(val);
+    setActiveSearchField('mobile');
+
+    if (val.length >= 3) {
+      setSearchResults(searchContacts(val, ContactType.CUSTOMER));
+    } else {
+      setSearchResults([]);
+    }
+
     if (val.length === 10) {
       const found = getContactByMobile(val);
-      if (found) selectContact(found);
-      else setIsNewContact(true);
-    } else { 
-      setIsNewContact(false); 
+      if (found) {
+        selectContact(found);
+      } else {
+        setIsNewContact(true);
+        setCurrentContactId(null);
+      }
+    } else {
+      setIsNewContact(false);
       setCurrentContactId(null);
     }
   };
 
   const handleNameSearch = (val: string) => {
     setCustomerName(val);
+    setActiveSearchField('name');
     if (val.length > 2) setSearchResults(searchContacts(val, ContactType.CUSTOMER));
     else setSearchResults([]);
   };
@@ -128,6 +142,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
     setState(c.state);
     setIsNewContact(false);
     setSearchResults([]);
+    setActiveSearchField(null);
     setCurrentContactId(c.id);
   };
 
@@ -284,16 +299,21 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ onBack, editTransac
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start">
                <div className="relative">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Customer Name</label>
-                  <input type="text" value={customerName} onChange={e => handleNameSearch(e.target.value)} className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600 uppercase text-xs shadow-sm" />
-                  {searchResults.length > 0 && (
+                  <input type="text" value={customerName} onChange={e => handleNameSearch(e.target.value)} placeholder="Search by name / mobile" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600 uppercase text-xs shadow-sm" />
+                  {activeSearchField === 'name' && searchResults.length > 0 && (
                     <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
                        {searchResults.map(c => <button key={c.id} onClick={() => selectContact(c)} className="w-full px-5 py-3 text-left text-[10px] hover:bg-indigo-50 font-bold uppercase border-b border-slate-50">{c.name} ({c.mobile})</button>)}
                     </div>
                   )}
                </div>
-               <div>
+               <div className="relative">
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Mobile</label>
-                  <input type="text" maxLength={10} value={mobile} onChange={e => handleMobileSearch(e.target.value.replace(/\D/g, ''))} className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-indigo-600 outline-none text-xs shadow-sm" />
+                  <input type="text" maxLength={10} value={mobile} onChange={e => handleMobileSearch(e.target.value.replace(/\D/g, ''))} placeholder="Search by mobile / name" className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-indigo-600 outline-none text-xs shadow-sm" />
+                  {activeSearchField === 'mobile' && searchResults.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
+                       {searchResults.map(c => <button key={`mob-${c.id}`} onClick={() => selectContact(c)} className="w-full px-5 py-3 text-left text-[10px] hover:bg-indigo-50 font-bold uppercase border-b border-slate-50">{c.name} ({c.mobile})</button>)}
+                    </div>
+                  )}
                </div>
                
                <div className="p-5 bg-indigo-50 rounded-2xl border border-indigo-100 flex flex-col justify-center shadow-sm min-h-[76px]">
