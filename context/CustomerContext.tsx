@@ -1,6 +1,7 @@
 
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { Customer } from '../types';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface CustomerContextType {
   customers: Customer[];
@@ -11,6 +12,7 @@ interface CustomerContextType {
 }
 
 const CustomerContext = createContext<CustomerContextType | undefined>(undefined);
+const CUSTOMER_STORAGE_KEY = 'nexus_customer_state_v1';
 
 export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [customers, setCustomers] = useState<Customer[]>([
@@ -42,6 +44,20 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       createdAt: new Date().toISOString()
     }
   ]);
+
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(CUSTOMER_STORAGE_KEY, null);
+    if (saved && Array.isArray(saved.customers)) setCustomers(saved.customers);
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(CUSTOMER_STORAGE_KEY, { customers });
+  }, [customers, isHydrated]);
 
   const getCustomerByMobile = useCallback((mobile: string) => {
     return customers.find(c => c.mobile === mobile);

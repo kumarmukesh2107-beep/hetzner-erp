@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { Product, WarehouseType, WarehouseStock, StockTransfer, ManualTransaction, ProductCategory } from '../types';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState, loadInventoryImages, saveInventoryImages } from '../utils/persistence';
 
 interface ImportResult { 
   total: number;
@@ -107,36 +108,58 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
-    try {
-      const savedInventoryState = localStorage.getItem(INVENTORY_STORAGE_KEY);
-      if (!savedInventoryState) {
-        setIsHydrated(true);
-        return;
-      }
+    const runHydration = async () => {
+      try {
+        const parsedState = loadLocalState<any | null>(INVENTORY_STORAGE_KEY, null);
+        if (parsedState) {
+          if (Array.isArray(parsedState.products)) setAllProducts(parsedState.products);
+          if (Array.isArray(parsedState.categories)) setAllCategories(parsedState.categories);
+          if (Array.isArray(parsedState.stocks)) setAllStocks(parsedState.stocks);
+          if (Array.isArray(parsedState.transfers)) setAllTransfers(parsedState.transfers);
+          if (Array.isArray(parsedState.manualTransactions)) setAllManualTransactions(parsedState.manualTransactions);
 
-      const parsedState = JSON.parse(savedInventoryState);
-      if (Array.isArray(parsedState.products)) setAllProducts(parsedState.products);
-      if (Array.isArray(parsedState.categories)) setAllCategories(parsedState.categories);
-      if (Array.isArray(parsedState.stocks)) setAllStocks(parsedState.stocks);
-      if (Array.isArray(parsedState.transfers)) setAllTransfers(parsedState.transfers);
-      if (Array.isArray(parsedState.manualTransactions)) setAllManualTransactions(parsedState.manualTransactions);
-    } catch (error) {
-      console.warn('Failed to load saved inventory state:', error);
-    } finally {
-      setIsHydrated(true);
-    }
+          const storedImages = await loadInventoryImages();
+          if (Object.keys(storedImages).length > 0 && Array.isArray(parsedState.products)) {
+            setAllProducts(parsedState.products.map((product: Product) => ({
+              ...product,
+              image: storedImages[product.id] || product.image,
+            })));
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to hydrate inventory state:', error);
+      } finally {
+        setIsHydrated(true);
+      }
+    };
+
+    runHydration();
   }, []);
 
   useEffect(() => {
     if (!isHydrated) return;
+
+    const imagesByProductId: Record<string, string> = {};
+    const persistableProducts = allProducts.map((product) => {
+      if (typeof product.image === 'string' && product.image.startsWith('data:image/')) {
+        imagesByProductId[product.id] = product.image;
+        return { ...product, image: undefined };
+      }
+      return product;
+    });
+
     const snapshot = {
-      products: allProducts,
+      products: persistableProducts,
       categories: allCategories,
       stocks: allStocks,
       transfers: allTransfers,
       manualTransactions: allManualTransactions,
     };
-    localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(snapshot));
+
+    saveLocalState(INVENTORY_STORAGE_KEY, snapshot);
+    saveInventoryImages(imagesByProductId).catch((error) => {
+      console.warn('Failed to persist inventory images:', error);
+    });
   }, [allProducts, allCategories, allStocks, allTransfers, allManualTransactions, isHydrated]);
 
   // Products filter now excludes SHADOW / HISTORICAL products from Live Catalog

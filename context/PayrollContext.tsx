@@ -1,8 +1,9 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Employee, Holiday, PayrollRecord, DailyAttendance, AttendanceStatus } from '../types';
 import { useAccounting } from './AccountingContext';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface PayrollContextType {
   employees: Employee[];
@@ -20,6 +21,7 @@ interface PayrollContextType {
 }
 
 const PayrollContext = createContext<PayrollContextType | undefined>(undefined);
+const PAYROLL_STORAGE_KEY = 'nexus_payroll_state_v1';
 
 export const PayrollProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { addExpense } = useAccounting();
@@ -49,6 +51,29 @@ export const PayrollProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [allPayrollHistory, setAllPayrollHistory] = useState<PayrollRecord[]>([]);
   const [allDailyAttendance, setAllDailyAttendance] = useState<DailyAttendance[]>([]);
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(PAYROLL_STORAGE_KEY, null);
+    if (saved) {
+      if (Array.isArray(saved.employees)) setAllEmployees(saved.employees);
+      if (Array.isArray(saved.holidays)) setAllHolidays(saved.holidays);
+      if (Array.isArray(saved.payrollHistory)) setAllPayrollHistory(saved.payrollHistory);
+      if (Array.isArray(saved.dailyAttendance)) setAllDailyAttendance(saved.dailyAttendance);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(PAYROLL_STORAGE_KEY, {
+      employees: allEmployees,
+      holidays: allHolidays,
+      payrollHistory: allPayrollHistory,
+      dailyAttendance: allDailyAttendance,
+    });
+  }, [allEmployees, allHolidays, allPayrollHistory, allDailyAttendance, isHydrated]);
 
   const employees = useMemo(() => 
     allEmployees.filter(e => e.companyId === activeCompany?.id), 

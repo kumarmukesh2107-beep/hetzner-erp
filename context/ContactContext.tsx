@@ -1,8 +1,9 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Contact, ContactType, ContactCategory, CONTACT_CATEGORIES } from '../types';
 import { useAccounting } from './AccountingContext';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface ContactImportResult {
   success: number;
@@ -24,6 +25,7 @@ interface ContactContextType {
 }
 
 const ContactContext = createContext<ContactContextType | undefined>(undefined);
+const CONTACT_STORAGE_KEY = 'nexus_contact_state_v1';
 
 export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { ledger } = useAccounting();
@@ -59,6 +61,22 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
       createdAt: new Date().toISOString()
     }
   ]);
+
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(CONTACT_STORAGE_KEY, null);
+    if (saved && Array.isArray(saved.contacts)) {
+      setAllContacts(saved.contacts);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(CONTACT_STORAGE_KEY, { contacts: allContacts });
+  }, [allContacts, isHydrated]);
 
   const contacts = useMemo(() => 
     allContacts.filter(c => c.companyId === activeCompany?.id), 

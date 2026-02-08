@@ -1,10 +1,11 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { SalesTransaction, SalesStatus, WarehouseType, SalesItem, DeliveryRecord, SalesLog } from '../types';
 import { useInventory } from './InventoryContext';
 import { useAccounting } from './AccountingContext';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
+import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface SalesContextType {
   sales: SalesTransaction[];
@@ -23,6 +24,7 @@ interface SalesContextType {
 }
 
 const SalesContext = createContext<SalesContextType | undefined>(undefined);
+const SALES_STORAGE_KEY = 'nexus_sales_state_v1';
 
 export const SalesProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { transferStock, deductStock } = useInventory();
@@ -63,6 +65,22 @@ export const SalesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ]);
   
   const [allSalesLogs, setAllSalesLogs] = useState<SalesLog[]>([]);
+
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    const saved = loadLocalState<any | null>(SALES_STORAGE_KEY, null);
+    if (saved) {
+      if (Array.isArray(saved.sales)) setAllSales(saved.sales);
+      if (Array.isArray(saved.salesLogs)) setAllSalesLogs(saved.salesLogs);
+    }
+    setIsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    saveLocalState(SALES_STORAGE_KEY, { sales: allSales, salesLogs: allSalesLogs });
+  }, [allSales, allSalesLogs, isHydrated]);
 
   const sales = useMemo(() => allSales.filter(s => s.companyId === activeCompany?.id), [allSales, activeCompany]);
   const salesLogs = useMemo(() => allSalesLogs.filter(l => l.companyId === activeCompany?.id), [allSalesLogs, activeCompany]);
