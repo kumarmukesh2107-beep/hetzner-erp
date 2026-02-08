@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Product, WarehouseType, WarehouseStock, StockTransfer, ManualTransaction, ProductCategory } from '../types';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
@@ -40,6 +40,7 @@ interface InventoryContextType {
 }
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
+const INVENTORY_STORAGE_KEY = 'nexus_inventory_state_v1';
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
@@ -103,6 +104,40 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const [allTransfers, setAllTransfers] = useState<StockTransfer[]>([]);
   const [allManualTransactions, setAllManualTransactions] = useState<ManualTransaction[]>([]);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const savedInventoryState = localStorage.getItem(INVENTORY_STORAGE_KEY);
+      if (!savedInventoryState) {
+        setIsHydrated(true);
+        return;
+      }
+
+      const parsedState = JSON.parse(savedInventoryState);
+      if (Array.isArray(parsedState.products)) setAllProducts(parsedState.products);
+      if (Array.isArray(parsedState.categories)) setAllCategories(parsedState.categories);
+      if (Array.isArray(parsedState.stocks)) setAllStocks(parsedState.stocks);
+      if (Array.isArray(parsedState.transfers)) setAllTransfers(parsedState.transfers);
+      if (Array.isArray(parsedState.manualTransactions)) setAllManualTransactions(parsedState.manualTransactions);
+    } catch (error) {
+      console.warn('Failed to load saved inventory state:', error);
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    const snapshot = {
+      products: allProducts,
+      categories: allCategories,
+      stocks: allStocks,
+      transfers: allTransfers,
+      manualTransactions: allManualTransactions,
+    };
+    localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [allProducts, allCategories, allStocks, allTransfers, allManualTransactions, isHydrated]);
 
   // Products filter now excludes SHADOW / HISTORICAL products from Live Catalog
   const products = useMemo(() => allProducts.filter(p => p.companyId === activeCompany?.id && !p.isHistorical), [allProducts, activeCompany]);
