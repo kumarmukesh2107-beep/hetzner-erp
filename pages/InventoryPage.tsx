@@ -100,7 +100,8 @@ const InventoryPage: React.FC = () => {
   const { user } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'stock' | 'booked' | 'transfer' | 'actions' | 'history' | 'reports'>('stock');
-  const [reportSubTab, setReportSubTab] = useState<'matrix' | 'aging' | 'zeros'>('matrix');
+  const [reportSubTab, setReportSubTab] = useState<'matrix' | 'aging' | 'zeros' | 'brand_summary' | 'warehouse_value'>('matrix');
+  const [reportBrandFilter, setReportBrandFilter] = useState('All Brands');
   
   // Image and Detail state
   const [isImagePreviewOpen, setIsImagePreviewOpen] = useState(false);
@@ -126,6 +127,11 @@ const InventoryPage: React.FC = () => {
 
   const brands = useMemo(() => ['All Brands', ...new Set(products.map(p => p.brand))].sort(), [products]);
   const categories = useMemo(() => ['All Categories', ...new Set(products.map(p => p.category))].sort(), [products]);
+
+  const reportFilteredProducts = useMemo(() => {
+    if (reportBrandFilter === 'All Brands') return products;
+    return products.filter(p => p.brand === reportBrandFilter);
+  }, [products, reportBrandFilter]);
 
   const filteredProducts = useMemo(() => {
     return products.filter(p => {
@@ -185,7 +191,7 @@ const InventoryPage: React.FC = () => {
   }, [transfers, manualTransactions, products]);
 
   const agingReportData = useMemo(() => {
-    return products.map(p => {
+    return reportFilteredProducts.map(p => {
       const lastMovement = unifiedHistory.find(h => h.productName === p.name);
       const daysSince = lastMovement ? Math.floor((new Date().getTime() - lastMovement.timestamp) / (1000 * 3600 * 24)) : 'N/A';
       return { ...p, lastDate: lastMovement?.date || 'Never', days: daysSince, total: getTotalStock(p.id) };
@@ -194,12 +200,12 @@ const InventoryPage: React.FC = () => {
       if (b.days === 'N/A') return -1;
       return Number(b.days) - Number(a.days);
     });
-  }, [products, unifiedHistory, getTotalStock]);
+  }, [reportFilteredProducts, unifiedHistory, getTotalStock]);
 
   const categoryMatrixData = useMemo(() => {
-    const categories = [...new Set(products.map(p => p.category))].sort();
+    const categories = [...new Set(reportFilteredProducts.map(p => p.category))].sort();
     return categories.map(cat => {
-      const catProducts = products.filter(p => p.category === cat);
+      const catProducts = reportFilteredProducts.filter(p => p.category === cat);
       const row = { 
         category: cat, 
         [WarehouseType.BOOKED]: 0, 
@@ -219,7 +225,47 @@ const InventoryPage: React.FC = () => {
       });
       return row;
     }).filter(row => row.totalQty > 0);
-  }, [products, getProductStock]);
+  }, [reportFilteredProducts, getProductStock]);
+
+  const inventoryBrandSummary = useMemo(() => {
+    const brandMap = new Map<string, { skuCount: number; stockQty: number; stockValue: number }>();
+
+    reportFilteredProducts.forEach((product) => {
+      const totalStock = getTotalStock(product.id);
+      const entry = brandMap.get(product.brand) || { skuCount: 0, stockQty: 0, stockValue: 0 };
+      brandMap.set(product.brand, {
+        skuCount: entry.skuCount + 1,
+        stockQty: entry.stockQty + totalStock,
+        stockValue: entry.stockValue + (totalStock * product.cost)
+      });
+    });
+
+    return Array.from(brandMap.entries())
+      .map(([brand, summary]) => ({ brand, ...summary }))
+      .sort((a, b) => b.stockValue - a.stockValue);
+  }, [reportFilteredProducts, getTotalStock]);
+
+  const inventoryWarehouseValue = useMemo(() => {
+    const summary = {
+      [WarehouseType.GODOWN]: { qty: 0, value: 0 },
+      [WarehouseType.DISPLAY]: { qty: 0, value: 0 },
+      [WarehouseType.BOOKED]: { qty: 0, value: 0 },
+      [WarehouseType.REPAIR]: { qty: 0, value: 0 }
+    };
+
+    reportFilteredProducts.forEach((product) => {
+      getProductStock(product.id).forEach((stock) => {
+        summary[stock.warehouse].qty += stock.quantity;
+        summary[stock.warehouse].value += stock.quantity * product.cost;
+      });
+    });
+
+    return Object.entries(summary).map(([warehouse, data]) => ({
+      warehouse,
+      qty: data.qty,
+      value: data.value
+    }));
+  }, [reportFilteredProducts, getProductStock]);
 
 
   const bookedItemsData = useMemo(() => {
@@ -525,9 +571,23 @@ const InventoryPage: React.FC = () => {
       {activeTab === 'reports' && (
         <div className="space-y-6 animate-in fade-in duration-500">
            <div className="flex p-1 bg-slate-200 rounded-xl w-fit tabs-row overflow-x-auto scrollbar-hide shrink-0">
-             {(['matrix', 'aging', 'zeros'] as const).map(rt => (
-                <button key={rt} onClick={() => setReportSubTab(rt)} className={`px-5 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${reportSubTab === rt ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{rt.replace('_', ' ')}</button>
+             {(['matrix', 'aging', 'zeros', 'brand_summary', 'warehouse_value'] as const).map(rt => (
+                <button key={rt} onClick={() => setReportSubTab(rt)} className={`px-5 py-1.5 text-[9px] font-black uppercase rounded-lg transition-all ${reportSubTab === rt ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}>{rt === 'brand_summary' ? 'brand summary' : rt === 'warehouse_value' ? 'warehouse value' : rt.replace('_', ' ')}</button>
              ))}
+           </div>
+
+           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-end gap-4">
+             <div className="flex flex-col">
+               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Brand Filter</label>
+               <select
+                 value={reportBrandFilter}
+                 onChange={e => setReportBrandFilter(e.target.value)}
+                 className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase min-w-[220px]"
+               >
+                 {brands.map(b => <option key={b} value={b}>{b}</option>)}
+               </select>
+             </div>
+             <p className="text-[10px] font-bold text-slate-400 uppercase">Applied to matrix, aging, zero stock and inventory summary reports.</p>
            </div>
 
            {reportSubTab === 'matrix' && (
@@ -618,7 +678,7 @@ const InventoryPage: React.FC = () => {
                           <tr><th className="px-8 py-4">Item Name</th><th className="px-8 py-4">Model No</th><th className="px-8 py-4">Brand</th><th className="px-8 py-4 text-right">Last Procurement Cost</th></tr>
                        </thead>
                        <tbody className="divide-y divide-slate-100">
-                          {products.filter(p => getTotalStock(p.id) === 0).map((p, i) => (
+                          {reportFilteredProducts.filter(p => getTotalStock(p.id) === 0).map((p, i) => (
                              <tr key={i} className="hover:bg-slate-50">
                                 <td className="px-8 py-4 font-black text-slate-800 uppercase text-xs">{p.name}</td>
                                 <td className="px-8 py-4 font-mono font-bold text-rose-600 text-xs">{p.modelNo}</td>
@@ -626,7 +686,7 @@ const InventoryPage: React.FC = () => {
                                 <td className="px-8 py-4 text-right font-black text-slate-900 text-xs">₹{p.cost.toLocaleString()}</td>
                              </tr>
                           ))}
-                          {products.filter(p => getTotalStock(p.id) === 0).length === 0 && (
+                          {reportFilteredProducts.filter(p => getTotalStock(p.id) === 0).length === 0 && (
                              <tr><td colSpan={4} className="py-20 text-center text-slate-300 font-black uppercase text-xs">Zero alerts. Catalog is fully stocked.</td></tr>
                           )}
                        </tbody>
@@ -634,8 +694,66 @@ const InventoryPage: React.FC = () => {
                  </div>
               </div>
            )}
+
+           {reportSubTab === 'brand_summary' && (
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                 <div className="px-8 py-5 border-b bg-slate-50"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Brand Inventory Summary</h3></div>
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                       <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
+                          <tr>
+                             <th className="px-8 py-4">Brand</th>
+                             <th className="px-6 py-4 text-center">SKU Count</th>
+                             <th className="px-6 py-4 text-center">Stock Qty</th>
+                             <th className="px-8 py-4 text-right">Holding Value</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-100">
+                          {inventoryBrandSummary.map((row, i) => (
+                             <tr key={i} className="hover:bg-slate-50">
+                                <td className="px-8 py-4 font-black text-slate-800 uppercase text-xs">{row.brand}</td>
+                                <td className="px-6 py-4 text-center font-bold text-slate-600">{row.skuCount}</td>
+                                <td className="px-6 py-4 text-center font-black text-indigo-600">{row.stockQty}</td>
+                                <td className="px-8 py-4 text-right font-black text-slate-900">₹{row.stockValue.toLocaleString()}</td>
+                             </tr>
+                          ))}
+                          {inventoryBrandSummary.length === 0 && (
+                             <tr><td colSpan={4} className="py-20 text-center text-slate-300 font-black uppercase text-xs">No brand data for selected filter.</td></tr>
+                          )}
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+           )}
+
+           {reportSubTab === 'warehouse_value' && (
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                 <div className="px-8 py-5 border-b bg-slate-50"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Warehouse Stock Value Report</h3></div>
+                 <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                       <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b">
+                          <tr>
+                             <th className="px-8 py-4">Warehouse</th>
+                             <th className="px-6 py-4 text-center">Total Qty</th>
+                             <th className="px-8 py-4 text-right">Holding Value</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-100">
+                          {inventoryWarehouseValue.map((row, i) => (
+                             <tr key={i} className="hover:bg-slate-50">
+                                <td className="px-8 py-4 font-black text-slate-800 uppercase text-xs">{row.warehouse}</td>
+                                <td className="px-6 py-4 text-center font-black text-indigo-600">{row.qty}</td>
+                                <td className="px-8 py-4 text-right font-black text-slate-900">₹{row.value.toLocaleString()}</td>
+                             </tr>
+                          ))}
+                       </tbody>
+                    </table>
+                 </div>
+              </div>
+           )}
         </div>
       )}
+
 
       {activeTab === 'history' && (
         <div className="space-y-4 animate-in fade-in duration-300">
@@ -721,5 +839,4 @@ const InventoryPage: React.FC = () => {
     </div>
   );
 };
-
 export default InventoryPage;

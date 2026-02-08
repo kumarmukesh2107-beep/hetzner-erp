@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
+import { useContacts } from '../context/ContactContext';
 import { useSales } from '../context/SalesContext';
 import { useInventory } from '../context/InventoryContext';
 import { SalesStatus, SalesTransaction, WarehouseType } from '../types';
@@ -9,12 +10,16 @@ import * as XLSX from 'xlsx';
 const SalesReportsHub: React.FC = () => {
   const { sales } = useSales();
   const { products } = useInventory();
+  const { contacts } = useContacts();
   
   const [reportTab, setReportTab] = useState<'analytics' | 'itemwise' | 'performance'>('analytics');
   const [dateFilter, setDateFilter] = useState({ 
     start: new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0], 
     end: new Date().toISOString().split('T')[0] 
   });
+  const [brandFilter, setBrandFilter] = useState('All Brands');
+
+  const reportBrands = useMemo(() => ['All Brands', ...new Set(products.map(p => p.brand || 'Other'))].sort(), [products]);
 
   // Helper to determine Month/Year key from bookingDate
   const getMonthYear = (dateStr: string) => {
@@ -32,6 +37,13 @@ const SalesReportsHub: React.FC = () => {
       return true;
     });
   }, [sales, dateFilter]);
+
+  const productById = useMemo(() => new Map(products.map(p => [p.id, p])), [products]);
+
+  const reportFilteredSales = useMemo(() => {
+    if (brandFilter === 'All Brands') return filteredSales;
+    return filteredSales.filter(s => s.items.some(item => (productById.get(item.productId)?.brand || 'Other') === brandFilter));
+  }, [filteredSales, brandFilter, productById]);
 
   // 2. Comprehensive Analytics Calculations
   const analyticsData = useMemo(() => {
@@ -81,7 +93,7 @@ const SalesReportsHub: React.FC = () => {
     });
 
     // Custom Range Calculations
-    filteredSales.forEach(s => {
+    reportFilteredSales.forEach(s => {
       const isConfirmed = s.status !== SalesStatus.QUOTATION && s.status !== SalesStatus.QUOTATION_SENT;
       if (!isConfirmed) return;
 
@@ -140,12 +152,12 @@ const SalesReportsHub: React.FC = () => {
       },
       lastMonthLabel: new Date(lastMonthYear, lastMonth).toLocaleString('default', { month: 'long', year: 'numeric' })
     };
-  }, [filteredSales, sales, products]);
+  }, [reportFilteredSales, sales, products]);
 
   // 3. Item-wise Ledger (Using bookingDate)
   const itemWiseRows = useMemo(() => {
     const rows: any[] = [];
-    filteredSales.forEach(s => {
+    reportFilteredSales.forEach(s => {
       s.items.forEach(item => {
         rows.push({
           bookingDate: s.bookingDate,
@@ -163,7 +175,7 @@ const SalesReportsHub: React.FC = () => {
       });
     });
     return rows.sort((a, b) => new Date(b.bookingDate).getTime() - new Date(a.bookingDate).getTime());
-  }, [filteredSales]);
+  }, [reportFilteredSales]);
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(itemWiseRows);
@@ -171,6 +183,43 @@ const SalesReportsHub: React.FC = () => {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Sales_Ledger");
     XLSX.writeFile(workbook, `Sales_Detail_Report_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
+
+  const salesSummaryData = useMemo(() => {
+    const confirmedSales = reportFilteredSales.filter(s => s.status !== SalesStatus.QUOTATION && s.status !== SalesStatus.QUOTATION_SENT);
+
+    const productSummary = new Map<string, { product: string; brand: string; qty: number; value: number }>();
+    const citySummary = new Map<string, { city: string; orders: number; value: number }>();
+    const clientSummary = new Map<string, { client: string; orders: number; value: number }>();
+
+    confirmedSales.forEach((sale) => {
+      const contactCity = contacts.find(c => c.id === sale.contactId)?.city || 'Unknown';
+      const cityEntry = citySummary.get(contactCity) || { city: contactCity, orders: 0, value: 0 };
+      citySummary.set(contactCity, { city: contactCity, orders: cityEntry.orders + 1, value: cityEntry.value + sale.grandTotal });
+
+      const clientEntry = clientSummary.get(sale.customerName) || { client: sale.customerName, orders: 0, value: 0 };
+      clientSummary.set(sale.customerName, { client: sale.customerName, orders: clientEntry.orders + 1, value: clientEntry.value + sale.grandTotal });
+
+      sale.items.forEach((item) => {
+        const prod = productById.get(item.productId);
+        const label = item.productName || prod?.name || 'Unknown Product';
+        const key = `${label}__${item.modelNo || ''}`;
+        const existing = productSummary.get(key) || { product: label, brand: prod?.brand || 'Other', qty: 0, value: 0 };
+        productSummary.set(key, {
+          product: label,
+          brand: prod?.brand || existing.brand,
+          qty: existing.qty + item.orderedQty,
+          value: existing.value + item.total
+        });
+      });
+    });
+
+    return {
+      topProductsByQty: Array.from(productSummary.values()).sort((a, b) => b.qty - a.qty).slice(0, 10),
+      topProductsByValue: Array.from(productSummary.values()).sort((a, b) => b.value - a.value).slice(0, 10),
+      topCities: Array.from(citySummary.values()).sort((a, b) => b.value - a.value).slice(0, 10),
+      topClients: Array.from(clientSummary.values()).sort((a, b) => b.value - a.value).slice(0, 10)
+    };
+  }, [reportFilteredSales, productById, contacts]);
 
   const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'];
 
@@ -223,6 +272,16 @@ const SalesReportsHub: React.FC = () => {
         >
           Clear Period
         </button>
+        <div className="flex flex-col">
+          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-1">Brand</span>
+          <select
+            value={brandFilter}
+            onChange={e => setBrandFilter(e.target.value)}
+            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+          >
+            {reportBrands.map(brand => <option key={brand} value={brand}>{brand}</option>)}
+          </select>
+        </div>
         <div className="ml-auto">
            <button onClick={exportToExcel} className="px-6 py-3 bg-emerald-600 text-white text-[10px] font-black rounded-xl uppercase tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 flex items-center gap-2 transition-all">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M16 8l-4-4m0 0L8 8m4-4v12" /></svg>
@@ -256,6 +315,46 @@ const SalesReportsHub: React.FC = () => {
                 <p className="text-3xl font-black text-slate-900">₹{analyticsData.metrics.totalConfirmedRevenue.toLocaleString()}</p>
                 <p className="text-[9px] text-indigo-500 font-bold uppercase mt-2">{analyticsData.metrics.confirmedCount} Verified Documents</p>
              </div>
+          </div>
+
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-8 py-5 border-b bg-slate-50"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Top Products by Qty</h3></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100"><tr><th className="px-8 py-4">Product</th><th className="px-4 py-4">Brand</th><th className="px-8 py-4 text-right">Qty</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">{salesSummaryData.topProductsByQty.map((row, i) => <tr key={`${row.product}-${i}`} className="hover:bg-slate-50"><td className="px-8 py-4 font-black text-slate-800 uppercase text-xs">{row.product}</td><td className="px-4 py-4 font-bold text-slate-500 uppercase text-xs">{row.brand}</td><td className="px-8 py-4 text-right font-black text-indigo-600">{row.qty}</td></tr>)}{salesSummaryData.topProductsByQty.length === 0 && <tr><td colSpan={3} className="px-8 py-16 text-center text-slate-300 font-black uppercase text-xs">No confirmed sales.</td></tr>}</tbody>
+                </table>
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-8 py-5 border-b bg-slate-50"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Top Products by Value</h3></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100"><tr><th className="px-8 py-4">Product</th><th className="px-4 py-4">Brand</th><th className="px-8 py-4 text-right">Value</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">{salesSummaryData.topProductsByValue.map((row, i) => <tr key={`${row.product}-${i}`} className="hover:bg-slate-50"><td className="px-8 py-4 font-black text-slate-800 uppercase text-xs">{row.product}</td><td className="px-4 py-4 font-bold text-slate-500 uppercase text-xs">{row.brand}</td><td className="px-8 py-4 text-right font-black text-slate-900">₹{Math.round(row.value).toLocaleString()}</td></tr>)}{salesSummaryData.topProductsByValue.length === 0 && <tr><td colSpan={3} className="px-8 py-16 text-center text-slate-300 font-black uppercase text-xs">No confirmed sales.</td></tr>}</tbody>
+                </table>
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-8 py-5 border-b bg-slate-50"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Top Cities</h3></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100"><tr><th className="px-8 py-4">City</th><th className="px-4 py-4 text-center">Orders</th><th className="px-8 py-4 text-right">Value</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">{salesSummaryData.topCities.map((row, i) => <tr key={`${row.city}-${i}`} className="hover:bg-slate-50"><td className="px-8 py-4 font-black text-slate-800 uppercase text-xs">{row.city}</td><td className="px-4 py-4 text-center font-black text-indigo-600">{row.orders}</td><td className="px-8 py-4 text-right font-black text-slate-900">₹{Math.round(row.value).toLocaleString()}</td></tr>)}{salesSummaryData.topCities.length === 0 && <tr><td colSpan={3} className="px-8 py-16 text-center text-slate-300 font-black uppercase text-xs">No confirmed sales.</td></tr>}</tbody>
+                </table>
+              </div>
+            </div>
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-8 py-5 border-b bg-slate-50"><h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Top Clients</h3></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100"><tr><th className="px-8 py-4">Client</th><th className="px-4 py-4 text-center">Orders</th><th className="px-8 py-4 text-right">Value</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">{salesSummaryData.topClients.map((row, i) => <tr key={`${row.client}-${i}`} className="hover:bg-slate-50"><td className="px-8 py-4 font-black text-slate-800 uppercase text-xs">{row.client}</td><td className="px-4 py-4 text-center font-black text-indigo-600">{row.orders}</td><td className="px-8 py-4 text-right font-black text-slate-900">₹{Math.round(row.value).toLocaleString()}</td></tr>)}{salesSummaryData.topClients.length === 0 && <tr><td colSpan={3} className="px-8 py-16 text-center text-slate-300 font-black uppercase text-xs">No confirmed sales.</td></tr>}</tbody>
+                </table>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
