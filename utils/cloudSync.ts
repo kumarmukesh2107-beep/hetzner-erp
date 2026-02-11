@@ -1,5 +1,7 @@
 import { exportDeviceSnapshot, importDeviceSnapshot, NexusTransferSnapshot } from './deviceTransfer';
 
+const SYNC_PATH_PREFIX = '/sync';
+
 export interface CloudSnapshotPayload extends NexusTransferSnapshot {
   version: number;
   companyId: string;
@@ -10,6 +12,7 @@ const getBaseUrl = (): string => {
   const fromEnv = import.meta.env.VITE_SYNC_API_BASE_URL as string | undefined;
   if (fromEnv) return fromEnv.replace(/\/$/, '');
   return '';
+  return (fromEnv || '').replace(/\/$/, '');
 };
 
 const getApiKey = (): string => {
@@ -32,6 +35,8 @@ const buildUrl = (companyId: string) => {
 
   // Default to same-origin Vercel proxy endpoint.
   return `/api/sync/${encodeURIComponent(companyId)}`;
+  if (!baseUrl) return null;
+  return `${baseUrl}${SYNC_PATH_PREFIX}/${encodeURIComponent(companyId)}`;
 };
 
 const getHeaders = () => {
@@ -45,6 +50,11 @@ export const isCloudSyncConfigured = (): boolean => true;
 
 export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
   const url = buildUrl(companyId);
+export const isCloudSyncConfigured = (): boolean => Boolean(getBaseUrl());
+
+export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
+  const url = buildUrl(companyId);
+  if (!url) return;
 
   const localSnapshot = await exportDeviceSnapshot();
   const payload: CloudSnapshotPayload = {
@@ -55,6 +65,7 @@ export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
   };
 
   const response = await fetch(url, {
+  await fetch(url, {
     method: 'PUT',
     headers: getHeaders(),
     body: JSON.stringify({ snapshot: payload }),
@@ -67,6 +78,7 @@ export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
 
 export const pullCloudSnapshot = async (companyId: string): Promise<CloudSnapshotPayload | null> => {
   const url = buildUrl(companyId);
+  if (!url) return null;
 
   const response = await fetch(url, {
     method: 'GET',

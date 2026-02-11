@@ -67,6 +67,9 @@ Set these on Vercel project env so frontend can safely call same-origin `/api/sy
 - `NEXUS_SYNC_BACKEND_ORIGIN` (for your server: `http://65.108.221.47:8787`)
 - `NEXUS_SYNC_API_KEY` (optional, forwarded to backend as `X-Nexus-API-Key`)
 
+- `VITE_SYNC_API_BASE_URL` (example: `http://localhost:8787`)
+- `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
+
 When configured, the app automatically:
 
 - pushes local ERP changes to backend,

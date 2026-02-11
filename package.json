@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "sync-backend": "node backend-sync-server.mjs",
     "check:merge-conflicts": "! rg -n '^(<{7}|={7}|>{7})' README.md components/System/CloudSyncAgent.tsx package.json pages/ImportPage.tsx utils/cloudSync.ts utils/persistence.ts"
+    "sync-backend": "node backend-sync-server.mjs"
   },
   "dependencies": {
     "recharts": "^3.6.0",
