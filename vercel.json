@@ -7,6 +7,10 @@
     {
       "source": "/api/proxy/:path*",
       "destination": "/api/proxy?proxyPath=:path*"
+    },
+    {
+      "source": "/api/sync/:path*",
+      "destination": "/api/sync?proxyPath=:path*"
     }
   ]
 }

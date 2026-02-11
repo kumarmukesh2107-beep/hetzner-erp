@@ -183,6 +183,7 @@ const ImportPage: React.FC = () => {
           <p className="text-xs md:text-sm font-black text-indigo-700 uppercase tracking-wide">Cross-device data sync</p>
           <p className="text-xs text-indigo-600 mt-1">
             {cloudEnabled
+              ? 'Auto-sync is enabled. Ensure sync endpoint is configured (recommended: same-origin /api/sync proxy) so updates replicate across devices/users.'
               ? 'Backend sync is active. Changes from this ERP will auto-sync across devices/users for the same company.'
               : 'Backend sync is not configured. Use backup export/import below to transfer data between devices.'}
           </p>

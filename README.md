@@ -49,6 +49,24 @@ Optional env vars:
 
 Set these in your frontend deployment/local `.env`:
 
+- `VITE_SYNC_API_BASE_URL` (optional)
+- `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
+
+`VITE_SYNC_API_BASE_URL` accepts all these forms:
+
+- `https://your-domain.com` (appends `/sync/:companyId`)
+- `https://your-domain.com/sync` (appends `/:companyId`)
+- `https://your-domain.com/api/sync` (appends `/:companyId`)
+
+If omitted, frontend defaults to same-origin `/api/sync/:companyId`.
+
+### 3) Vercel API proxy environment (recommended for production)
+
+Set these on Vercel project env so frontend can safely call same-origin `/api/sync` over HTTPS:
+
+- `NEXUS_SYNC_BACKEND_ORIGIN` (for your server: `http://65.108.221.47:8787`)
+- `NEXUS_SYNC_API_KEY` (optional, forwarded to backend as `X-Nexus-API-Key`)
+
 - `VITE_SYNC_API_BASE_URL` (example: `http://localhost:8787`)
 - `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
 
@@ -59,3 +77,45 @@ When configured, the app automatically:
 - refreshes client state when remote updates are detected.
 
 If not configured, manual backup export/import in Data Import page remains available.
+
+### Merge-conflict safety check
+
+Before pushing conflict-resolution commits, run:
+
+```bash
+npm run check:merge-conflicts
+```
+
+This checks critical files for unresolved conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
+
+### Quick conflict resolution guide (GitHub UI)
+
+If GitHub shows conflicts in these files:
+
+- `README.md`
+- `components/System/CloudSyncAgent.tsx`
+- `package.json`
+- `pages/ImportPage.tsx`
+- `utils/cloudSync.ts`
+- `utils/persistence.ts`
+
+Use this approach:
+
+1. Click **Accept both changes** (safest first step).
+2. Remove all marker lines manually:
+   - `<<<<<<< ...`
+   - `=======`
+   - `>>>>>>> ...`
+3. Keep these final values when cleaning up:
+   - `README.md`: keep the detailed sync env section + merge-conflict safety section.
+   - `utils/cloudSync.ts`: keep default fallback URL `/api/sync/:companyId` when env is empty.
+   - `package.json`: keep script `check:merge-conflicts`.
+   - `utils/persistence.ts`: keep `nexus_last_local_change_at` updates and `nexus-local-state-changed` dispatch.
+4. Run checks locally:
+
+```bash
+npm run check:merge-conflicts
+npm run build
+```
+
+Only push once both commands pass.

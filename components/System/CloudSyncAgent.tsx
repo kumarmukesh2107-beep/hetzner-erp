@@ -5,8 +5,14 @@ import { applyCloudSnapshot, isCloudSyncConfigured, pullCloudSnapshot, pushCloud
 
 const LOCAL_SYNC_EVENT = 'nexus-local-state-changed';
 
+const getLastCloudSyncTs = () => {
 const getLocalTs = () => {
   const ts = localStorage.getItem('nexus_last_cloud_sync_at');
+  return ts ? new Date(ts).getTime() : 0;
+};
+
+const getLastLocalChangeTs = () => {
+  const ts = localStorage.getItem('nexus_last_local_change_at');
   return ts ? new Date(ts).getTime() : 0;
 };
 
@@ -22,6 +28,22 @@ const CloudSyncAgent: React.FC = () => {
   useEffect(() => {
     if (!enabled || !companyId) return;
 
+    const reconcileWithCloud = async () => {
+      try {
+        const remote = await pullCloudSnapshot(companyId);
+        const remoteTs = new Date(remote?.updatedAt || remote?.exportedAt || 0).getTime();
+        const cloudTs = getLastCloudSyncTs();
+        const localChangeTs = getLastLocalChangeTs();
+
+        const localIsNewer = localChangeTs > Math.max(remoteTs, cloudTs);
+
+        if (localIsNewer || !remote) {
+          await pushCloudSnapshot(companyId);
+          localStorage.setItem('nexus_last_cloud_sync_at', new Date().toISOString());
+          return;
+        }
+
+        if (remoteTs > Math.max(cloudTs, localChangeTs)) {
     const pullOnce = async () => {
       try {
         const remote = await pullCloudSnapshot(companyId);
@@ -37,12 +59,15 @@ const CloudSyncAgent: React.FC = () => {
           window.location.reload();
         }
       } catch (error) {
+        console.warn('Cloud sync reconcile failed:', error);
         console.warn('Cloud sync pull failed:', error);
       } finally {
         applyingRef.current = false;
       }
     };
 
+    reconcileWithCloud();
+    const poll = window.setInterval(reconcileWithCloud, 20000);
     pullOnce();
     const poll = window.setInterval(pullOnce, 25000);
     return () => window.clearInterval(poll);
@@ -58,6 +83,9 @@ const CloudSyncAgent: React.FC = () => {
       pushTimerRef.current = window.setTimeout(async () => {
         try {
           await pushCloudSnapshot(companyId);
+          const nowIso = new Date().toISOString();
+          localStorage.setItem('nexus_last_cloud_sync_at', nowIso);
+          localStorage.setItem('nexus_last_local_change_at', nowIso);
           localStorage.setItem('nexus_last_cloud_sync_at', new Date().toISOString());
         } catch (error) {
           console.warn('Cloud sync push failed:', error);

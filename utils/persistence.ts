@@ -12,6 +12,7 @@ export const loadLocalState = <T>(key: string, fallback: T): T => {
 export const saveLocalState = <T>(key: string, value: T): boolean => {
   try {
     localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem('nexus_last_local_change_at', new Date().toISOString());
     window.dispatchEvent(new CustomEvent('nexus-local-state-changed', { detail: { key } }));
     return true;
   } catch (error) {
@@ -60,6 +61,7 @@ export const saveInventoryImages = async (images: Record<string, string>): Promi
     store.put(images, 'images');
 
     tx.oncomplete = () => {
+      localStorage.setItem('nexus_last_local_change_at', new Date().toISOString());
       window.dispatchEvent(new CustomEvent('nexus-local-state-changed', { detail: { key: IMAGE_STORE } }));
       resolve();
     };
