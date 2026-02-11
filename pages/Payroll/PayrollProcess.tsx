@@ -17,8 +17,6 @@ const PayrollProcess: React.FC = () => {
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
   const geminiApiKey =
-    process.env.API_KEY ||
-    process.env.GEMINI_API_KEY ||
     import.meta.env.VITE_GEMINI_API_KEY ||
     import.meta.env.VITE_API_KEY ||
     '';
