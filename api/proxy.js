@@ -1,18 +1,28 @@
-const BACKEND_BASE_URL = 'http://65.108.221.47';
+const BACKEND_ORIGIN = 'http://65.108.221.47';
 
-function setCorsHeaders(res) {
+function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 }
 
-function getForwardPath(req) {
-  const url = new URL(req.url || '/api/proxy', 'http://localhost');
+function getTargetUrl(req) {
+  const incoming = new URL(req.url || '/api/proxy', 'http://localhost');
 
-  // Supports /api/proxy/test-db and query fallback /api/proxy?proxyPath=test-db
-  const fromPath = url.pathname.replace(/^\/api\/proxy\/?/, '');
-  const fromQuery = url.searchParams.get('proxyPath') || '';
-  return (fromPath || fromQuery).replace(/^\/+/, '');
+  // Supports:
+  // - /api/proxy/test-db            (with Vercel rewrite to ?proxyPath=test-db)
+  // - /api/proxy?proxyPath=test-db
+  const pathFromUrl = incoming.pathname.replace(/^\/api\/proxy\/?/, '');
+  const pathFromQuery = incoming.searchParams.get('proxyPath') || '';
+  const forwardPath = (pathFromUrl || pathFromQuery).replace(/^\/+/, '');
+
+  incoming.searchParams.delete('proxyPath');
+
+  const target = new URL(BACKEND_ORIGIN);
+  target.pathname = forwardPath ? `/${forwardPath}` : '/';
+  target.search = incoming.searchParams.toString();
+
+  return target.toString();
 }
 
 function getForwardHeaders(req) {
@@ -23,44 +33,45 @@ function getForwardHeaders(req) {
   return headers;
 }
 
+function getForwardBody(req) {
+  const method = (req.method || 'GET').toUpperCase();
+  if (method === 'GET' || method === 'HEAD') return undefined;
+
+  if (Buffer.isBuffer(req.body) || typeof req.body === 'string') {
+    return req.body;
+  }
+
+  if (req.body == null) return undefined;
+
+  return JSON.stringify(req.body);
+}
+
 export default async function handler(req, res) {
-  setCorsHeaders(res);
+  setCors(res);
 
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
 
   try {
-    const incomingUrl = new URL(req.url || '/api/proxy', 'http://localhost');
-    const forwardPath = getForwardPath(req);
+    const targetUrl = getTargetUrl(req);
 
-    const targetUrl = new URL(BACKEND_BASE_URL);
-    targetUrl.pathname = forwardPath ? `/${forwardPath}` : '/';
-
-    // Keep query params except proxyPath helper
-    incomingUrl.searchParams.delete('proxyPath');
-    targetUrl.search = incomingUrl.searchParams.toString();
-
-    const headers = getForwardHeaders(req);
-    const method = req.method || 'GET';
-    const hasBody = !['GET', 'HEAD'].includes(method.toUpperCase());
-
-    const upstreamResponse = await fetch(targetUrl.toString(), {
-      method,
-      headers,
-      body: hasBody ? req.body : undefined,
+    const upstream = await fetch(targetUrl, {
+      method: req.method,
+      headers: getForwardHeaders(req),
+      body: getForwardBody(req),
     });
 
-    const responseBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
+    const raw = Buffer.from(await upstream.arrayBuffer());
 
-    res.status(upstreamResponse.status);
-    upstreamResponse.headers.forEach((value, key) => {
-      if (key.toLowerCase() !== 'content-encoding') {
-        res.setHeader(key, value);
-      }
+    res.status(upstream.status);
+    upstream.headers.forEach((value, key) => {
+      const lower = key.toLowerCase();
+      if (lower === 'content-encoding' || lower === 'transfer-encoding' || lower === 'connection') return;
+      res.setHeader(key, value);
     });
 
-    return res.send(responseBuffer);
+    return res.send(raw);
   } catch (error) {
     return res.status(502).json({
       error: 'Bad gateway',
