@@ -18,3 +18,13 @@ View your app in AI Studio: https://ai.studio/apps/drive/1F4FAaiixW8QmuxmQhzxTld
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+
+
+## Deployment configuration notes
+
+For frontend runtime configuration, define these variables in your deployment environment:
+
+- `VITE_API_BASE_URL`
+- `VITE_GEMINI_API_KEY` (or `VITE_API_KEY`)
+
+For backend verification, follow [BACKEND_READINESS_CHECKLIST.md](./BACKEND_READINESS_CHECKLIST.md).
