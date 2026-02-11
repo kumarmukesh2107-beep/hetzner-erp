@@ -17,7 +17,7 @@ function getTargetUrl(req) {
   incoming.searchParams.delete('proxyPath');
 
   const target = new URL(BACKEND_ORIGIN);
-  target.pathname = forwardPath ? `/${forwardPath}` : '/';
+  target.pathname = forwardPath ? `/sync/${forwardPath}` : '/sync';
   target.search = incoming.searchParams.toString();
 
   return target.toString();

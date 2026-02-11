@@ -1,7 +1,5 @@
 import { exportDeviceSnapshot, importDeviceSnapshot, NexusTransferSnapshot } from './deviceTransfer';
 
-const SYNC_PATH_PREFIX = '/sync';
-
 export interface CloudSnapshotPayload extends NexusTransferSnapshot {
   version: number;
   companyId: string;
@@ -10,33 +8,31 @@ export interface CloudSnapshotPayload extends NexusTransferSnapshot {
 
 const getBaseUrl = (): string => {
   const fromEnv = import.meta.env.VITE_SYNC_API_BASE_URL as string | undefined;
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
-  return '';
-  return (fromEnv || '').replace(/\/$/, '');
+  return (fromEnv || '').trim().replace(/\/$/, '');
 };
 
 const getApiKey = (): string => {
   return (import.meta.env.VITE_SYNC_API_KEY as string | undefined) || '';
 };
 
-const buildUrl = (companyId: string) => {
+const buildUrl = (companyId: string): string => {
   const baseUrl = getBaseUrl();
-  if (baseUrl) {
-    // Supports all formats:
-    // - https://domain.com                 -> /sync/:companyId
-    // - https://domain.com/sync            -> /sync/:companyId
-    // - https://domain.com/api/sync        -> /api/sync/:companyId
-    const normalized = baseUrl.replace(/\/$/, '');
-    if (normalized.endsWith('/api/sync') || normalized.endsWith('/sync')) {
-      return `${normalized}/${encodeURIComponent(companyId)}`;
-    }
-    return `${normalized}/sync/${encodeURIComponent(companyId)}`;
+  const encodedCompanyId = encodeURIComponent(companyId);
+
+  if (!baseUrl) {
+    // Default to same-origin Vercel proxy endpoint.
+    return `/api/sync/${encodedCompanyId}`;
   }
 
-  // Default to same-origin Vercel proxy endpoint.
-  return `/api/sync/${encodeURIComponent(companyId)}`;
-  if (!baseUrl) return null;
-  return `${baseUrl}${SYNC_PATH_PREFIX}/${encodeURIComponent(companyId)}`;
+  // Supports all formats:
+  // - https://domain.com                 -> /sync/:companyId
+  // - https://domain.com/sync            -> /sync/:companyId
+  // - https://domain.com/api/sync        -> /api/sync/:companyId
+  if (baseUrl.endsWith('/api/sync') || baseUrl.endsWith('/sync')) {
+    return `${baseUrl}/${encodedCompanyId}`;
+  }
+
+  return `${baseUrl}/sync/${encodedCompanyId}`;
 };
 
 const getHeaders = () => {
@@ -50,13 +46,8 @@ export const isCloudSyncConfigured = (): boolean => true;
 
 export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
   const url = buildUrl(companyId);
-export const isCloudSyncConfigured = (): boolean => Boolean(getBaseUrl());
-
-export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
-  const url = buildUrl(companyId);
-  if (!url) return;
-
   const localSnapshot = await exportDeviceSnapshot();
+
   const payload: CloudSnapshotPayload = {
     ...localSnapshot,
     version: 1,
@@ -65,7 +56,6 @@ export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
   };
 
   const response = await fetch(url, {
-  await fetch(url, {
     method: 'PUT',
     headers: getHeaders(),
     body: JSON.stringify({ snapshot: payload }),
@@ -78,7 +68,6 @@ export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
 
 export const pullCloudSnapshot = async (companyId: string): Promise<CloudSnapshotPayload | null> => {
   const url = buildUrl(companyId);
-  if (!url) return null;
 
   const response = await fetch(url, {
     method: 'GET',
