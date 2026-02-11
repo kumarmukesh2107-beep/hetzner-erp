@@ -49,8 +49,16 @@ Optional env vars:
 
 Set these in your frontend deployment/local `.env`:
 
-- `VITE_SYNC_API_BASE_URL` (optional; default uses same-origin `/api/sync` proxy)
+- `VITE_SYNC_API_BASE_URL` (optional)
 - `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
+
+`VITE_SYNC_API_BASE_URL` accepts all these forms:
+
+- `https://your-domain.com` (appends `/sync/:companyId`)
+- `https://your-domain.com/sync` (appends `/:companyId`)
+- `https://your-domain.com/api/sync` (appends `/:companyId`)
+
+If omitted, frontend defaults to same-origin `/api/sync/:companyId`.
 
 ### 3) Vercel API proxy environment (recommended for production)
 

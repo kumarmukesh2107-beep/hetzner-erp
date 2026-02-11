@@ -19,7 +19,15 @@ const getApiKey = (): string => {
 const buildUrl = (companyId: string) => {
   const baseUrl = getBaseUrl();
   if (baseUrl) {
-    return `${baseUrl}/sync/${encodeURIComponent(companyId)}`;
+    // Supports all formats:
+    // - https://domain.com                 -> /sync/:companyId
+    // - https://domain.com/sync            -> /sync/:companyId
+    // - https://domain.com/api/sync        -> /api/sync/:companyId
+    const normalized = baseUrl.replace(/\/$/, '');
+    if (normalized.endsWith('/api/sync') || normalized.endsWith('/sync')) {
+      return `${normalized}/${encodeURIComponent(companyId)}`;
+    }
+    return `${normalized}/sync/${encodeURIComponent(companyId)}`;
   }
 
   // Default to same-origin Vercel proxy endpoint.
