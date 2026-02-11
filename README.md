@@ -28,3 +28,34 @@ For frontend runtime configuration, define these variables in your deployment en
 - `VITE_GEMINI_API_KEY` (or `VITE_API_KEY`)
 
 For backend verification, follow [BACKEND_READINESS_CHECKLIST.md](./BACKEND_READINESS_CHECKLIST.md).
+
+## Multi-device sync backend (new)
+
+This repo now includes a lightweight sync backend service to share ERP state across devices/users.
+
+### 1) Start sync backend
+
+```bash
+node backend-sync-server.mjs
+```
+
+Optional env vars:
+
+- `SYNC_PORT` (default `8787`)
+- `NEXUS_SYNC_API_KEY` (recommended in production)
+- `NEXUS_SYNC_STORE_FILE` (custom JSON store path)
+
+### 2) Frontend environment
+
+Set these in your frontend deployment/local `.env`:
+
+- `VITE_SYNC_API_BASE_URL` (example: `http://localhost:8787`)
+- `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
+
+When configured, the app automatically:
+
+- pushes local ERP changes to backend,
+- polls backend for newer snapshots,
+- refreshes client state when remote updates are detected.
+
+If not configured, manual backup export/import in Data Import page remains available.
