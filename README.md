@@ -74,3 +74,13 @@ When configured, the app automatically:
 - refreshes client state when remote updates are detected.
 
 If not configured, manual backup export/import in Data Import page remains available.
+
+### Merge-conflict safety check
+
+Before pushing conflict-resolution commits, run:
+
+```bash
+npm run check:merge-conflicts
+```
+
+This checks critical files for unresolved conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`).
