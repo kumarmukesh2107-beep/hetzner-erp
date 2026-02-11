@@ -1,7 +1,5 @@
 import { exportDeviceSnapshot, importDeviceSnapshot, NexusTransferSnapshot } from './deviceTransfer';
 
-const SYNC_PATH_PREFIX = '/sync';
-
 export interface CloudSnapshotPayload extends NexusTransferSnapshot {
   version: number;
   companyId: string;
@@ -20,7 +18,12 @@ const getApiKey = (): string => {
 
 const buildUrl = (companyId: string) => {
   const baseUrl = getBaseUrl();
-  return `${baseUrl}${SYNC_PATH_PREFIX}/${encodeURIComponent(companyId)}`;
+  if (baseUrl) {
+    return `${baseUrl}/sync/${encodeURIComponent(companyId)}`;
+  }
+
+  // Default to same-origin Vercel proxy endpoint.
+  return `/api/sync/${encodeURIComponent(companyId)}`;
 };
 
 const getHeaders = () => {

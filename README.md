@@ -56,7 +56,7 @@ Set these in your frontend deployment/local `.env`:
 
 Set these on Vercel project env so frontend can safely call same-origin `/api/sync` over HTTPS:
 
-- `NEXUS_SYNC_BACKEND_ORIGIN` (example: `http://<hetzner-ip>:8787`)
+- `NEXUS_SYNC_BACKEND_ORIGIN` (for your server: `http://65.108.221.47:8787`)
 - `NEXUS_SYNC_API_KEY` (optional, forwarded to backend as `X-Nexus-API-Key`)
 
 When configured, the app automatically:
