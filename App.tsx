@@ -16,6 +16,7 @@ import { UserRole } from './types';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import AIAssistantWidget from './components/AI/AIAssistantWidget';
+import CloudSyncAgent from './components/System/CloudSyncAgent';
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -70,9 +71,10 @@ const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <CloudSyncAgent />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header onToggleSidebar={() => setSidebarOpen(true)} />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-6 lg:p-10 relative">
+        <main className="flex-1 overflow-x-auto overflow-y-auto p-3 sm:p-4 md:p-6 lg:p-10 relative">
           <div className="max-w-7xl mx-auto">{children}</div>
           {user?.role !== UserRole.STAFF && <AIAssistantWidget />}
         </main>

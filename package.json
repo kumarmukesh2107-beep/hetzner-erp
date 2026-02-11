@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sync-backend": "node backend-sync-server.mjs"
   },
   "dependencies": {
     "recharts": "^3.6.0",

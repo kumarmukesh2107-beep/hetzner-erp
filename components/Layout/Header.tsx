@@ -19,8 +19,8 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const allowedCompanies = companies.filter(c => user?.allowedCompanies.includes(c.id));
 
   return (
-    <header className="flex items-center justify-between h-16 px-6 bg-white border-b border-slate-200 shadow-sm relative z-50">
-      <div className="flex items-center gap-4">
+    <header className="flex items-center justify-between h-16 px-3 sm:px-4 md:px-6 bg-white border-b border-slate-200 shadow-sm relative z-50 gap-2">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0">
         <button
           onClick={onToggleSidebar}
           className="p-2 -ml-2 text-slate-500 rounded-md lg:hidden hover:bg-slate-100"
@@ -33,20 +33,20 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         <div className="relative">
           <button 
             onClick={() => { setShowSwitch(!showSwitch); setShowUserMenu(false); }}
-            className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-300 transition-all group"
+            className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-300 transition-all group min-w-0 max-w-[56vw] sm:max-w-none"
           >
             <div className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center text-[10px] font-black">
               {activeCompany?.name.charAt(0)}
             </div>
-            <div className="text-left">
-              <p className="text-[10px] font-black text-slate-800 uppercase tracking-tighter leading-none">{activeCompany?.name}</p>
+            <div className="text-left min-w-0">
+              <p className="text-[10px] font-black text-slate-800 uppercase tracking-tighter leading-none truncate">{activeCompany?.name}</p>
               <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{activeCompany?.gstNo}</p>
             </div>
             <svg className={`w-3 h-3 text-slate-300 transition-transform ${showSwitch ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
           </button>
 
           {showSwitch && (
-            <div className="absolute top-full left-0 mt-2 w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
+            <div className="absolute top-full left-0 mt-2 w-[88vw] max-w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2">
               <div className="p-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Switch Company</p>
                  {user?.role === UserRole.ADMIN && (
@@ -76,7 +76,7 @@ const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
         </div>
       </div>
 
-      <div className="flex items-center space-x-2">
+      <div className="flex items-center space-x-1 sm:space-x-2 shrink-0">
         <div className="hidden md:flex flex-col items-end mr-2">
            <p className="text-xs font-black text-slate-800 uppercase tracking-tight leading-none">{user?.name}</p>
            <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mt-1">{user?.role}</p>

@@ -2,6 +2,8 @@
 import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useInventory } from '../context/InventoryContext';
+import { exportDeviceSnapshot, importDeviceSnapshot } from '../utils/deviceTransfer';
+import { isCloudSyncConfigured } from '../utils/cloudSync';
 
 interface LogEntry {
   type: 'success' | 'warning' | 'error';
@@ -19,6 +21,8 @@ const ImportPage: React.FC = () => {
   const productInputRef = useRef<HTMLInputElement>(null);
   const stockInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const backupInputRef = useRef<HTMLInputElement>(null);
+  const cloudEnabled = isCloudSyncConfigured();
 
   const addLog = (type: LogEntry['type'], message: string, subMessage?: string, errors?: string[]) => {
     setResults(prev => [{
@@ -121,11 +125,46 @@ const ImportPage: React.FC = () => {
     if (imageInputRef.current) imageInputRef.current.value = '';
   };
 
+  const handleExportBackup = async () => {
+    try {
+      const snapshot = await exportDeviceSnapshot();
+      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+      const fileName = `nexus-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      addLog('success', 'Device Backup Exported', 'Download completed. Import this file on the other device to sync data.');
+    } catch {
+      addLog('error', 'Backup Export Failed', 'Unable to export local ERP data from this browser.');
+    }
+  };
+
+  const handleImportBackup = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setLoading(true);
+    try {
+      const content = await file.text();
+      const parsed = JSON.parse(content);
+      await importDeviceSnapshot(parsed);
+      addLog('success', 'Backup Imported', 'Device data restored. Reloading application now.');
+      setTimeout(() => window.location.reload(), 700);
+    } catch {
+      addLog('error', 'Backup Import Failed', 'Selected file is not a valid NexusERP backup JSON.');
+    } finally {
+      setLoading(false);
+      if (backupInputRef.current) backupInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:gap-0 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Data Import Wizard</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800">Data Import Wizard</h1>
           <p className="text-sm text-slate-500 mt-1">Populate product catalog, warehouse stocks, and media library.</p>
         </div>
         {loading && (
@@ -137,6 +176,34 @@ const ImportPage: React.FC = () => {
             System Working...
           </div>
         )}
+      </div>
+
+      <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 md:p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs md:text-sm font-black text-indigo-700 uppercase tracking-wide">Cross-device data sync</p>
+          <p className="text-xs text-indigo-600 mt-1">
+            {cloudEnabled
+              ? 'Auto-sync is enabled. Make sure /api/sync is connected to your server backend so updates replicate across devices/users.'
+              : 'Backend sync is not configured. Use backup export/import below to transfer data between devices.'}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={handleExportBackup}
+            className="px-3 py-2 text-[11px] font-black uppercase tracking-wide rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+          >
+            Export Backup
+          </button>
+          <button
+            type="button"
+            onClick={() => backupInputRef.current?.click()}
+            className="px-3 py-2 text-[11px] font-black uppercase tracking-wide rounded-lg bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+          >
+            Import Backup
+          </button>
+          <input ref={backupInputRef} onChange={handleImportBackup} type="file" hidden accept="application/json" />
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
