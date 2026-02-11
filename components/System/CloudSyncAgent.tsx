@@ -34,14 +34,15 @@ const CloudSyncAgent: React.FC = () => {
         const cloudTs = getLastCloudSyncTs();
         const localChangeTs = getLastLocalChangeTs();
 
-        const localIsNewer = localChangeTs > Math.max(remoteTs, cloudTs);
+        const hasPendingLocalChanges = localChangeTs > cloudTs;
 
-        if (localIsNewer || !remote) {
+        if (hasPendingLocalChanges) {
           await pushCloudSnapshot(companyId);
           localStorage.setItem('nexus_last_cloud_sync_at', new Date().toISOString());
           return;
         }
 
+        if (remote && remoteTs > cloudTs) {
         if (remoteTs > Math.max(cloudTs, localChangeTs)) {
           applyingRef.current = true;
           await applyCloudSnapshot(remote);

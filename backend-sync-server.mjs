@@ -98,15 +98,10 @@ createServer(async (req, res) => {
       }
 
       const incoming = parsed.snapshot;
-      const current = store[companyId];
 
-      const incomingTs = new Date(incoming.updatedAt || incoming.exportedAt || 0).getTime();
-      const currentTs = new Date(current?.updatedAt || current?.exportedAt || 0).getTime();
-
-      if (!current || incomingTs >= currentTs) {
-        store[companyId] = { ...incoming, updatedAt: new Date().toISOString() };
-        await writeStore(store);
-      }
+      // Last-write-wins using server receive time to avoid device clock skew.
+      store[companyId] = { ...incoming, updatedAt: new Date().toISOString() };
+      await writeStore(store);
 
       return sendJson(res, 200, {
         ok: true,
