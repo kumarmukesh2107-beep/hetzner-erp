@@ -6,70 +6,65 @@ function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
 }
 
+function getForwardPath(req) {
+  const url = new URL(req.url || '/api/proxy', 'http://localhost');
+
+  // Supports /api/proxy/test-db and query fallback /api/proxy?proxyPath=test-db
+  const fromPath = url.pathname.replace(/^\/api\/proxy\/?/, '');
+  const fromQuery = url.searchParams.get('proxyPath') || '';
+  return (fromPath || fromQuery).replace(/^\/+/, '');
+}
+
+function getForwardHeaders(req) {
+  const headers = { ...req.headers };
+  delete headers.host;
+  delete headers.connection;
+  delete headers['content-length'];
+  return headers;
+}
+
 export default async function handler(req, res) {
   setCorsHeaders(res);
 
   if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+    return res.status(204).end();
   }
 
   try {
-    const query = req.query || {};
-    const targetPath = typeof query.path === 'string' ? query.path : '';
+    const incomingUrl = new URL(req.url || '/api/proxy', 'http://localhost');
+    const forwardPath = getForwardPath(req);
 
-    const forwardParams = new URLSearchParams();
-    for (const [key, value] of Object.entries(query)) {
-      if (key === 'path') continue;
-      if (Array.isArray(value)) {
-        value.forEach((item) => forwardParams.append(key, item));
-      } else if (value !== undefined) {
-        forwardParams.append(key, String(value));
-      }
-    }
+    const targetUrl = new URL(BACKEND_BASE_URL);
+    targetUrl.pathname = forwardPath ? `/${forwardPath}` : '/';
 
-    const normalizedPath = targetPath.replace(/^\/+/, '');
-    const targetUrl = `${BACKEND_BASE_URL}${normalizedPath ? `/${normalizedPath}` : ''}${
-      forwardParams.toString() ? `?${forwardParams.toString()}` : ''
-    }`;
+    // Keep query params except proxyPath helper
+    incomingUrl.searchParams.delete('proxyPath');
+    targetUrl.search = incomingUrl.searchParams.toString();
 
-    const headers = {};
+    const headers = getForwardHeaders(req);
+    const method = req.method || 'GET';
+    const hasBody = !['GET', 'HEAD'].includes(method.toUpperCase());
 
-    if (req.headers.authorization) {
-      headers.authorization = req.headers.authorization;
-    }
-
-    if (req.headers['content-type']) {
-      headers['content-type'] = req.headers['content-type'];
-    }
-
-    const shouldSendBody = !['GET', 'HEAD'].includes(req.method);
-    const contentType = typeof req.headers['content-type'] === 'string' ? req.headers['content-type'] : '';
-
-    let body;
-    if (shouldSendBody) {
-      if (contentType.includes('application/json') && typeof req.body !== 'string') {
-        body = JSON.stringify(req.body ?? {});
-      } else {
-        body = req.body;
-      }
-    }
-
-    const upstreamResponse = await fetch(targetUrl, {
-      method: req.method,
+    const upstreamResponse = await fetch(targetUrl.toString(), {
+      method,
       headers,
-      body,
+      body: hasBody ? req.body : undefined,
     });
 
-    const responseText = await upstreamResponse.text();
-    const responseContentType = upstreamResponse.headers.get('content-type') || 'application/json';
+    const responseBuffer = Buffer.from(await upstreamResponse.arrayBuffer());
 
     res.status(upstreamResponse.status);
-    res.setHeader('Content-Type', responseContentType);
-    return res.send(responseText);
+    upstreamResponse.headers.forEach((value, key) => {
+      if (key.toLowerCase() !== 'content-encoding') {
+        res.setHeader(key, value);
+      }
+    });
+
+    return res.send(responseBuffer);
   } catch (error) {
     return res.status(502).json({
       error: 'Bad gateway',
-      message: error instanceof Error ? error.message : 'Unknown proxy error',
+      message: error instanceof Error ? error.message : 'Proxy request failed',
     });
   }
 }
