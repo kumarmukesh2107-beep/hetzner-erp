@@ -3,6 +3,7 @@ import React, { useState, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useInventory } from '../context/InventoryContext';
 import { exportDeviceSnapshot, importDeviceSnapshot } from '../utils/deviceTransfer';
+import { isCloudSyncConfigured } from '../utils/cloudSync';
 
 interface LogEntry {
   type: 'success' | 'warning' | 'error';
@@ -21,6 +22,7 @@ const ImportPage: React.FC = () => {
   const stockInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
+  const cloudEnabled = isCloudSyncConfigured();
 
   const addLog = (type: LogEntry['type'], message: string, subMessage?: string, errors?: string[]) => {
     setResults(prev => [{
@@ -178,8 +180,12 @@ const ImportPage: React.FC = () => {
 
       <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 md:p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs md:text-sm font-black text-indigo-700 uppercase tracking-wide">Cross-device visibility fix</p>
-          <p className="text-xs text-indigo-600 mt-1">Current ERP data is browser-local. Export backup from one device and import on another device.</p>
+          <p className="text-xs md:text-sm font-black text-indigo-700 uppercase tracking-wide">Cross-device data sync</p>
+          <p className="text-xs text-indigo-600 mt-1">
+            {cloudEnabled
+              ? 'Backend sync is active. Changes from this ERP will auto-sync across devices/users for the same company.'
+              : 'Backend sync is not configured. Use backup export/import below to transfer data between devices.'}
+          </p>
         </div>
         <div className="flex gap-2">
           <button
