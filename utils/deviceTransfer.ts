@@ -5,6 +5,7 @@ const TRANSFER_STORAGE_KEYS = [
   'nexus_sales_state_v1',
   'nexus_purchase_state_v1',
   'nexus_contact_state_v1',
+  'nexus_customer_state_v1',
   'nexus_accounting_state_v1',
   'nexus_payroll_state_v1',
   'nexus_company_state_v1',
