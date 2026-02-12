@@ -1,8 +1,14 @@
+async function readRawBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', chunk => chunks.push(chunk));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: '20mb',
-    },
+    bodyParser: false,
   },
 };
 const BACKEND_ORIGIN = process.env.NEXUS_SYNC_BACKEND_ORIGIN || 'http://65.108.221.47:8787';
