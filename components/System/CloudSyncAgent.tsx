@@ -34,6 +34,17 @@ const CloudSyncAgent: React.FC = () => {
         const cloudTs = getLastCloudSyncTs();
         const localChangeTs = getLastLocalChangeTs();
 
+        // First-run safety: on a new device/session with no known cloud sync time,
+        // prefer pulling server data to avoid pushing seeded/demo local defaults
+        // and overwriting the latest shared snapshot.
+        if (cloudTs === 0 && remote) {
+          applyingRef.current = true;
+          await applyCloudSnapshot(remote);
+          localStorage.setItem('nexus_last_cloud_sync_at', remote.updatedAt || new Date().toISOString());
+          window.location.reload();
+          return;
+        }
+
         const hasPendingLocalChanges = localChangeTs > cloudTs;
 
         if (hasPendingLocalChanges) {
