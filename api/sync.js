@@ -1,3 +1,10 @@
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '20mb',
+    },
+  },
+};
 const BACKEND_ORIGIN = process.env.NEXUS_SYNC_BACKEND_ORIGIN || 'http://65.108.221.47:8787';
 const BACKEND_API_KEY = process.env.NEXUS_SYNC_API_KEY || '';
 
