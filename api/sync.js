@@ -1,16 +1,18 @@
 async function readRawBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    req.on('data', chunk => chunks.push(chunk));
+    req.on('data', (chunk) => chunks.push(chunk));
     req.on('end', () => resolve(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
+
 export const config = {
   api: {
     bodyParser: false,
   },
 };
+
 const BACKEND_ORIGIN = process.env.NEXUS_SYNC_BACKEND_ORIGIN || 'http://65.108.221.47:8787';
 const BACKEND_API_KEY = process.env.NEXUS_SYNC_API_KEY || '';
 
@@ -49,16 +51,6 @@ function getForwardHeaders(req) {
   return headers;
 }
 
-function getForwardBody(req) {
-  const method = (req.method || 'GET').toUpperCase();
-  if (method === 'GET' || method === 'HEAD') return undefined;
-
-  if (Buffer.isBuffer(req.body) || typeof req.body === 'string') return req.body;
-  if (req.body == null) return undefined;
-
-  return JSON.stringify(req.body);
-}
-
 export default async function handler(req, res) {
   setCors(res);
 
@@ -68,11 +60,13 @@ export default async function handler(req, res) {
 
   try {
     const targetUrl = getTargetUrl(req);
+    const method = (req.method || 'GET').toUpperCase();
+    const rawBody = method === 'GET' || method === 'HEAD' ? undefined : await readRawBody(req);
 
     const upstream = await fetch(targetUrl, {
       method: req.method,
       headers: getForwardHeaders(req),
-      body: getForwardBody(req),
+      body: rawBody && rawBody.length > 0 ? rawBody : undefined,
     });
 
     const raw = Buffer.from(await upstream.arrayBuffer());
