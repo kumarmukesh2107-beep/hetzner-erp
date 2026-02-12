@@ -4,6 +4,7 @@ import { useCompany } from '../../context/CompanyContext';
 import { applyCloudSnapshot, isCloudSyncConfigured, pullCloudSnapshot, pushCloudSnapshot } from '../../utils/cloudSync';
 
 const LOCAL_SYNC_EVENT = 'nexus-local-state-changed';
+const CLOUD_POLL_INTERVAL_MS = 5000;
 
 const getLastCloudSyncTs = () => {
   const ts = localStorage.getItem('nexus_last_cloud_sync_at');
@@ -66,9 +67,24 @@ const CloudSyncAgent: React.FC = () => {
       }
     };
 
+    const reconcileOnVisibility = () => {
+      if (!document.hidden) {
+        reconcileWithCloud();
+      }
+    };
+
     reconcileWithCloud();
-    const poll = window.setInterval(reconcileWithCloud, 20000);
-    return () => window.clearInterval(poll);
+    const poll = window.setInterval(reconcileWithCloud, CLOUD_POLL_INTERVAL_MS);
+    window.addEventListener('visibilitychange', reconcileOnVisibility);
+    window.addEventListener('focus', reconcileWithCloud);
+    window.addEventListener('online', reconcileWithCloud);
+
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener('visibilitychange', reconcileOnVisibility);
+      window.removeEventListener('focus', reconcileWithCloud);
+      window.removeEventListener('online', reconcileWithCloud);
+    };
   }, [enabled, companyId]);
 
   useEffect(() => {
