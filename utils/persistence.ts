@@ -11,7 +11,14 @@ export const loadLocalState = <T>(key: string, fallback: T): T => {
 
 export const saveLocalState = <T>(key: string, value: T): boolean => {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    const previous = localStorage.getItem(key);
+
+    if (previous === serialized) {
+      return true;
+    }
+
+    localStorage.setItem(key, serialized);
     localStorage.setItem('nexus_last_local_change_at', new Date().toISOString());
     window.dispatchEvent(new CustomEvent('nexus-local-state-changed', { detail: { key } }));
     return true;
