@@ -46,19 +46,23 @@ const CloudSyncAgent: React.FC = () => {
           return;
         }
 
-        const hasPendingLocalChanges = localChangeTs > cloudTs;
+        const latestKnownTs = Math.max(cloudTs, localChangeTs);
 
-        if (hasPendingLocalChanges) {
-          await pushCloudSnapshot(companyId);
-          localStorage.setItem('nexus_last_cloud_sync_at', new Date().toISOString());
+        if (remote && remoteTs > latestKnownTs) {
+          applyingRef.current = true;
+          const syncTs = remote.updatedAt || new Date().toISOString();
+          await applyCloudSnapshot(remote);
+          localStorage.setItem('nexus_last_cloud_sync_at', syncTs);
+          localStorage.setItem('nexus_last_local_change_at', syncTs);
+          window.location.reload();
           return;
         }
 
-        if (remote && remoteTs > Math.max(cloudTs, localChangeTs)) {
-          applyingRef.current = true;
-          await applyCloudSnapshot(remote);
-          localStorage.setItem('nexus_last_cloud_sync_at', remote.updatedAt || new Date().toISOString());
-          window.location.reload();
+        const hasPendingLocalChanges = localChangeTs > cloudTs;
+        if (hasPendingLocalChanges && (!remote || localChangeTs >= remoteTs)) {
+          await pushCloudSnapshot(companyId);
+          localStorage.setItem('nexus_last_cloud_sync_at', new Date().toISOString());
+          return;
         }
       } catch (error) {
         console.warn('Cloud sync reconcile failed:', error);
