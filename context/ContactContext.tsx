@@ -127,11 +127,28 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const newBatch: Contact[] = [];
     const updateBatch: Record<string, Partial<Contact>> = {};
 
+    const categoryMap: Record<string, ContactCategory> = {
+      customer: 'Customer',
+      supplier: 'Supplier',
+      architect: 'Architect',
+      employee: 'Employee',
+      contractor: 'Contractor',
+      transporter: 'Transporter',
+      other: 'Other'
+    };
+
     data.forEach((row, index) => {
       const rowNum = index + 2;
-      const name = String(row['name'] || row['Name'] || '').trim();
-      const mobile = String(row['mobile'] || row['Mobile'] || '').trim().replace(/[^\d]/g, '');
-      const typesStr = String(row['contact_type'] || row['Contact Types'] || '');
+      const name = String(row['name*'] || row['name'] || row['Name'] || '').trim();
+      const mobile = String(row['mobile*'] || row['mobile'] || row['Mobile'] || '').trim().replace(/[^\d]/g, '');
+      const typesStr = String(
+        row['contact_type*'] ||
+        row['contact_type'] ||
+        row['Contact Types'] ||
+        row['mapped_types'] ||
+        row['Mapped Types'] ||
+        ''
+      );
       
       // Mandatory Validations
       if (!name) {
@@ -146,13 +163,18 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
 
       // Categorization
-      const parsedTypes = typesStr.split(',')
-        .map(t => t.trim())
-        .filter(t => (CONTACT_CATEGORIES as unknown as string[]).includes(t)) as ContactCategory[];
+      const parsedTypes = Array.from(
+        new Set(
+          typesStr
+            .split(',')
+            .map(t => categoryMap[t.trim().toLowerCase()])
+            .filter(Boolean)
+        )
+      ) as ContactCategory[];
       
       if (parsedTypes.length === 0) {
         result.failed++;
-        result.errors.push(`Row ${rowNum}: Missing or invalid contact types.`);
+        result.errors.push(`Row ${rowNum}: Missing or invalid contact types. Use one or more of ${CONTACT_CATEGORIES.join(', ')}.`);
         return;
       }
 
