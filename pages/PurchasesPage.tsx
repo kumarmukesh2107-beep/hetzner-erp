@@ -8,6 +8,7 @@ import { PurchaseStatus, PaymentStatus, PurchaseTransaction, WarehouseType } fro
 import NewPurchasePage from './NewPurchasePage';
 import StandardDocument from '../components/Print/StandardDocument';
 import { triggerStandalonePrint } from '../utils/printService';
+import * as XLSX from 'xlsx';
 
 const StatusBadge: React.FC<{ status: PurchaseStatus }> = ({ status }) => {
   const config = {
@@ -290,6 +291,44 @@ const PurchasesPage: React.FC = () => {
     }));
   };
 
+
+  const handleExportPurchases = () => {
+    if (filteredPurchases.length === 0) {
+      alert('No purchase records available to export.');
+      return;
+    }
+
+    const rows = filteredPurchases.map((purchase) => {
+      const orderedQty = purchase.items.reduce((sum, item) => sum + item.orderedQty, 0);
+      const receivedQty = purchase.items.reduce((sum, item) => sum + item.receivedQty, 0);
+      const billedQty = purchase.items.reduce((sum, item) => sum + item.billedQty, 0);
+      const supplier = suppliers.find((s) => s.id === purchase.contactId) || getContactById(purchase.contactId);
+
+      return {
+        'PO No': purchase.purchaseNo,
+        'Issue Date': purchase.date,
+        'Expected Date': purchase.expectedDeliveryDate || '',
+        'Supplier': supplier?.name || 'Unknown',
+        'Supplier Contact': supplier?.phone || supplier?.mobile || '',
+        'Warehouse': purchase.warehouse,
+        'Status': purchase.status,
+        'Ordered Qty': orderedQty,
+        'Received Qty': receivedQty,
+        'Billed Qty': billedQty,
+        'Subtotal': purchase.subtotal,
+        'GST': purchase.totalGst,
+        'Grand Total': purchase.grandTotal,
+        'Amount Paid': purchase.amountPaid,
+        'Pending Amount': Number((purchase.grandTotal - purchase.amountPaid).toFixed(2)),
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Purchases');
+    XLSX.writeFile(workbook, `purchases_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   if (showNewForm) return <NewPurchasePage onBack={() => { setShowNewForm(false); setEditingPurchase(null); }} editTransaction={editingPurchase} />;
 
   return (
@@ -299,7 +338,10 @@ const PurchasesPage: React.FC = () => {
            <h1 className="text-2xl font-bold text-slate-800 uppercase tracking-tight">Procurement Ledger</h1>
            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Manage Supply Chain & Quantity Verification</p>
         </div>
-        <button onClick={() => { setEditingPurchase(null); setShowNewForm(true); }} className="px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Create New RFQ</button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleExportPurchases} className="px-4 py-2.5 bg-white text-slate-700 border border-slate-200 font-black rounded-xl uppercase tracking-widest text-[10px] shadow-sm hover:bg-slate-50 transition-all">Export</button>
+          <button onClick={() => { setEditingPurchase(null); setShowNewForm(true); }} className="px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Create New RFQ</button>
+        </div>
       </div>
 
       {/* Advanced Filters */}

@@ -12,6 +12,7 @@ import NewQuotationPage from './NewQuotationPage';
 import SalesReportsHub from './SalesReportsHub';
 import StandardDocument from '../components/Print/StandardDocument';
 import { triggerStandalonePrint } from '../utils/printService';
+import * as XLSX from 'xlsx';
 
 const StatusBadge: React.FC<{ status: SalesStatus, isHistorical?: boolean }> = ({ status, isHistorical }) => {
   if (isHistorical) {
@@ -201,6 +202,45 @@ const SalesPage: React.FC = () => {
     }));
   };
 
+
+  const handleExportSales = () => {
+    if (processedData.length === 0) {
+      alert('No sales records available to export.');
+      return;
+    }
+
+    const rows = processedData.map((tx) => {
+      const deliveredQty = tx.items.reduce((acc, item) => acc + (item.deliveredQty || 0), 0);
+      const invoicedQty = tx.items.reduce((acc, item) => acc + (item.invoicedQty || 0), 0);
+      const orderedQty = tx.items.reduce((acc, item) => acc + (item.orderedQty || 0), 0);
+
+      return {
+        'Order No': tx.orderNo,
+        'Booking Date': tx.bookingDate || tx.date,
+        'Customer': tx.customerName,
+        'Customer Address': tx.customerAddress || '',
+        'Sales Person': tx.salesPerson || '',
+        'Warehouse': tx.warehouse,
+        'Status': tx.status,
+        'Ordered Qty': orderedQty,
+        'Delivered Qty': deliveredQty,
+        'Invoiced Qty': invoicedQty,
+        'Subtotal': tx.subtotal,
+        'Discount': tx.totalDiscount,
+        'GST': tx.totalGst,
+        'Grand Total': tx.grandTotal,
+        'Amount Paid': tx.amountPaid,
+        'Pending Amount': Number((tx.grandTotal - tx.amountPaid).toFixed(2)),
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sales');
+    const tabLabel = activeTab === 'quotations' ? 'quotations' : 'orders';
+    XLSX.writeFile(workbook, `sales_${tabLabel}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   if (showNewForm) return <NewQuotationPage onBack={() => { setShowNewForm(false); setEditingTx(null); }} editTransaction={editingTx} />;
 
   return (
@@ -210,7 +250,10 @@ const SalesPage: React.FC = () => {
            <h1 className="text-xl md:text-2xl font-bold text-slate-800 uppercase tracking-tight">Sales Operations</h1>
            <p className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Quotations & Active Sales Orders</p>
         </div>
-        <button onClick={() => { setEditingTx(null); setShowNewForm(true); }} className="w-full md:w-auto px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Create Quotation</button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleExportSales} className="w-full md:w-auto px-4 py-2.5 bg-white text-slate-700 border border-slate-200 font-black rounded-xl uppercase tracking-widest text-[10px] shadow-sm hover:bg-slate-50 transition-all">Export</button>
+          <button onClick={() => { setEditingTx(null); setShowNewForm(true); }} className="w-full md:w-auto px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all">Create Quotation</button>
+        </div>
       </div>
 
       <div className="flex items-center space-x-1 p-1 bg-slate-200 rounded-2xl w-full md:w-fit tabs-row no-print overflow-x-auto scrollbar-hide">
