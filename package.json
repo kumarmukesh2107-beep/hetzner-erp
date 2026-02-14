@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "sync-backend": "node backend-sync-server.mjs",
-    "check:merge-conflicts": "! rg -n '^(<{7}|={7}|>{7})' README.md components/System/CloudSyncAgent.tsx package.json pages/ImportPage.tsx utils/cloudSync.ts utils/persistence.ts"
+    "check:merge-conflicts": "! rg -n '^(<{7}|={7}|>{7})' README.md components/System/CloudSyncAgent.tsx package.json pages/ImportPage.tsx utils/cloudSync.ts utils/persistence.ts",
+    "start": "node server.js"
   },
   "dependencies": {
     "recharts": "^3.6.0",
@@ -16,7 +17,9 @@
     "react-dom": "^19.2.3",
     "react-router-dom": "^7.12.0",
     "xlsx": "0.18.5",
-    "@google/genai": "^1.38.0"
+    "@google/genai": "^1.38.0",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
