@@ -345,7 +345,7 @@ const PurchasesPage: React.FC = () => {
       </div>
 
       {/* Advanced Filters */}
-      <div className="bg-white p-5 rounded-[24px] border border-slate-200 shadow-sm flex flex-wrap items-end gap-4 no-print">
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90 p-5 rounded-[24px] border border-slate-200 shadow-sm flex flex-wrap items-end gap-4 no-print">
         <div className="flex-1 min-w-[200px]">
           <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Search Ref</label>
           <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="PUR-XXXX" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold" />
