@@ -226,9 +226,18 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const searchContacts = useCallback((query: string, category?: ContactCategory) => {
     const lowerQuery = query.toLowerCase();
+
     return contacts.filter(c => {
-      const matchesCategory = !category || c.contactTypes.includes(category);
+      const normalizedTypes = Array.isArray(c.contactTypes) ? c.contactTypes : [];
+      const inferredTypes: ContactCategory[] = [];
+
+      if (c.type === ContactType.CUSTOMER) inferredTypes.push('Customer');
+      if (c.type === ContactType.SUPPLIER) inferredTypes.push('Supplier');
+
+      const availableTypes = new Set<ContactCategory>([...normalizedTypes, ...inferredTypes]);
+      const matchesCategory = !category || availableTypes.has(category);
       const matchesQuery = !query || c.mobile.includes(query) || c.name.toLowerCase().includes(lowerQuery);
+
       return matchesCategory && matchesQuery;
     });
   }, [contacts]);
