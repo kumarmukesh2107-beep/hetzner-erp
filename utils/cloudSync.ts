@@ -42,7 +42,15 @@ const getHeaders = () => {
   return headers;
 };
 
-export const isCloudSyncConfigured = (): boolean => true;
+export const isCloudSyncConfigured = (): boolean => {
+  const explicitToggle = (import.meta.env.VITE_ENABLE_CLOUD_SYNC as string | undefined)?.trim().toLowerCase();
+  if (explicitToggle === 'true') return true;
+  if (explicitToggle === 'false') return false;
+
+  // Safe default: do not auto-enable cloud reconciliation unless sync env is present.
+  // This prevents accidental overwrite of local ERP data in deployments without intended sync setup.
+  return Boolean(getBaseUrl() || getApiKey());
+};
 
 export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
   const url = buildUrl(companyId);

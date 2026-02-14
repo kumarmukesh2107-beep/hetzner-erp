@@ -49,6 +49,7 @@ Optional env vars:
 
 Set these in your frontend deployment/local `.env`:
 
+- `VITE_ENABLE_CLOUD_SYNC` (`true` to force enable, `false` to disable)
 - `VITE_SYNC_API_BASE_URL` (optional)
 - `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
 
@@ -59,6 +60,11 @@ Set these in your frontend deployment/local `.env`:
 - `https://your-domain.com/api/sync` (appends `/:companyId`)
 
 If omitted, frontend defaults to same-origin `/api/sync/:companyId`.
+
+Cloud sync enablement rules (important):
+- If `VITE_ENABLE_CLOUD_SYNC=true`, sync is enabled.
+- If `VITE_ENABLE_CLOUD_SYNC=false`, sync is disabled.
+- If unset, sync auto-enables only when `VITE_SYNC_API_BASE_URL` or `VITE_SYNC_API_KEY` is present.
 
 ### 3) Vercel API proxy environment (recommended for production)
 

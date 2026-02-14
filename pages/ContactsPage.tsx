@@ -230,7 +230,7 @@ const ContactsPage: React.FC = () => {
 
       {activeTab === 'list' && (
         <div className="animate-in fade-in duration-500 space-y-6">
-          <div className="bg-white p-4 md:p-5 rounded-2xl md:rounded-[24px] border border-slate-200 shadow-sm flex flex-col md:flex-row flex-wrap items-stretch md:items-end gap-3 md:gap-4 no-print">
+          <div className="sticky top-0 z-30 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90 p-4 md:p-5 rounded-2xl md:rounded-[24px] border border-slate-200 shadow-sm flex flex-col md:flex-row flex-wrap items-stretch md:items-end gap-3 md:gap-4 no-print">
             <div className="flex-1 min-w-[150px]">
               <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Search Directory</label>
               <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="Name / Mobile..." className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500" />
