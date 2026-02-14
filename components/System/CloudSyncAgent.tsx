@@ -61,25 +61,29 @@ const CloudSyncAgent: React.FC = () => {
   useEffect(() => {
     if (!enabled || !companyId) return;
 
+    const resolveFallbackLocalTs = (localChangeTs: number): number => {
+      if (localChangeTs > 0) {
+        localDataFallbackTsRef.current = localChangeTs;
+        return localChangeTs;
+      }
+
+      if (hasPersistedBusinessData()) {
+        if (!localDataFallbackTsRef.current) {
+          localDataFallbackTsRef.current = Date.now();
+        }
+        return localDataFallbackTsRef.current;
+      }
+
+      return 0;
+    };
+
     const reconcileWithCloud = async () => {
       try {
         const remote = await pullCloudSnapshot(companyId);
         const remoteTs = new Date(remote?.updatedAt || remote?.exportedAt || 0).getTime();
         const cloudTs = getLastCloudSyncTs();
         const localChangeTs = getLastLocalChangeTs();
-        let fallbackLocalTs = localChangeTs;
-        if (!fallbackLocalTs && hasPersistedBusinessData()) {
-          if (!localDataFallbackTsRef.current) {
-            localDataFallbackTsRef.current = Date.now();
-          }
-          fallbackLocalTs = localDataFallbackTsRef.current;
-        }
-
-        if (localChangeTs > 0) {
-          localDataFallbackTsRef.current = localChangeTs;
-        }
-
-        const fallbackLocalTs = localChangeTs || (hasPersistedBusinessData() ? Date.now() : 0);
+        const fallbackLocalTs = resolveFallbackLocalTs(localChangeTs);
 
         const latestKnownTs = Math.max(cloudTs, fallbackLocalTs);
 
