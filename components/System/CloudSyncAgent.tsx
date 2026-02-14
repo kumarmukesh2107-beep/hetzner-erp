@@ -79,6 +79,8 @@ const CloudSyncAgent: React.FC = () => {
           localDataFallbackTsRef.current = localChangeTs;
         }
 
+        const fallbackLocalTs = localChangeTs || (hasPersistedBusinessData() ? Date.now() : 0);
+
         const latestKnownTs = Math.max(cloudTs, fallbackLocalTs);
 
         if (remote && remoteTs > latestKnownTs) {
