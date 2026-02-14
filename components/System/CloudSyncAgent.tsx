@@ -51,6 +51,12 @@ const CloudSyncAgent: React.FC = () => {
   const enabled = useMemo(() => isAuthenticated && Boolean(companyId) && isCloudSyncConfigured(), [isAuthenticated, companyId]);
   const applyingRef = useRef(false);
   const pushTimerRef = useRef<number | null>(null);
+  const localDataFallbackTsRef = useRef(0);
+
+
+  useEffect(() => {
+    localDataFallbackTsRef.current = 0;
+  }, [companyId]);
 
   useEffect(() => {
     if (!enabled || !companyId) return;
@@ -61,7 +67,17 @@ const CloudSyncAgent: React.FC = () => {
         const remoteTs = new Date(remote?.updatedAt || remote?.exportedAt || 0).getTime();
         const cloudTs = getLastCloudSyncTs();
         const localChangeTs = getLastLocalChangeTs();
-        const fallbackLocalTs = localChangeTs || (hasPersistedBusinessData() ? Date.now() : 0);
+        let fallbackLocalTs = localChangeTs;
+        if (!fallbackLocalTs && hasPersistedBusinessData()) {
+          if (!localDataFallbackTsRef.current) {
+            localDataFallbackTsRef.current = Date.now();
+          }
+          fallbackLocalTs = localDataFallbackTsRef.current;
+        }
+
+        if (localChangeTs > 0) {
+          localDataFallbackTsRef.current = localChangeTs;
+        }
 
         const latestKnownTs = Math.max(cloudTs, fallbackLocalTs);
 
@@ -71,6 +87,7 @@ const CloudSyncAgent: React.FC = () => {
           await applyCloudSnapshot(remote);
           localStorage.setItem('nexus_last_cloud_sync_at', syncTs);
           localStorage.setItem('nexus_last_local_change_at', syncTs);
+          localDataFallbackTsRef.current = new Date(syncTs).getTime();
           window.location.reload();
           return;
         }
@@ -81,6 +98,7 @@ const CloudSyncAgent: React.FC = () => {
           const syncTs = new Date().toISOString();
           localStorage.setItem('nexus_last_cloud_sync_at', syncTs);
           localStorage.setItem('nexus_last_local_change_at', syncTs);
+          localDataFallbackTsRef.current = new Date(syncTs).getTime();
           return;
         }
       } catch (error) {
@@ -123,6 +141,7 @@ const CloudSyncAgent: React.FC = () => {
           const nowIso = new Date().toISOString();
           localStorage.setItem('nexus_last_cloud_sync_at', nowIso);
           localStorage.setItem('nexus_last_local_change_at', nowIso);
+          localDataFallbackTsRef.current = new Date(nowIso).getTime();
         } catch (error) {
           console.warn('Cloud sync push failed:', error);
         }
