@@ -17,21 +17,11 @@ const getApiKey = (): string => {
 
 const buildUrl = (companyId: string): string => {
   const baseUrl = getBaseUrl();
-  const encodedCompanyId = encodeURIComponent(companyId);
-
   if (!baseUrl) {
-    // Default to same-origin Vercel proxy endpoint.
-    return `/api/sync/${encodedCompanyId}`;
+    throw new Error('Cloud sync base URL is not configured. Set VITE_SYNC_API_BASE_URL.');
   }
 
-  // Supports all formats:
-  // - https://domain.com                 -> /sync/:companyId
-  // - https://domain.com/sync            -> /sync/:companyId
-  // - https://domain.com/api/sync        -> /api/sync/:companyId
-  if (baseUrl.endsWith('/api/sync') || baseUrl.endsWith('/sync')) {
-    return `${baseUrl}/${encodedCompanyId}`;
-  }
-
+  const encodedCompanyId = encodeURIComponent(companyId);
   return `${baseUrl}/sync/${encodedCompanyId}`;
 };
 
