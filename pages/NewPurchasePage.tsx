@@ -3,8 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useInventory } from '../context/InventoryContext';
 import { usePurchase } from '../context/PurchaseContext';
 import { useContacts } from '../context/ContactContext';
-import { useCompany } from '../context/CompanyContext';
-import { PurchaseItem, WarehouseType, PurchaseTransaction, ContactType, Contact } from '../types';
+import { PurchaseItem, WarehouseType, PurchaseTransaction, ContactType, Contact, Supplier } from '../types';
 import SearchableProductSelect from '../components/Shared/SearchableProductSelect';
 
 interface NewPurchasePageProps {
@@ -14,10 +13,8 @@ interface NewPurchasePageProps {
 
 const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransaction }) => {
   const { products } = useInventory();
-  const { createRFQ, updatePurchase } = usePurchase();
-  const { searchContacts, getContactById } = useContacts();
-  const { activeCompany } = useCompany();
-
+  const { createRFQ, updatePurchase, suppliers } = usePurchase();
+  const { getContactById, contacts } = useContacts();
   const [contactId, setContactId] = useState('');
   const [warehouse, setWarehouse] = useState<WarehouseType>(WarehouseType.GODOWN);
   const [rfqNo, setRfqNo] = useState(`RFQ-${Date.now().toString().slice(-6)}`);
@@ -26,10 +23,24 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
   const [items, setItems] = useState<PurchaseItem[]>([]);
 
   const [vendorSearch, setVendorSearch] = useState('');
-  const [vendorResults, setVendorResults] = useState<Contact[]>([]);
+  const [vendorResults, setVendorResults] = useState<Array<Contact | Supplier>>([]);
   const [showVendorDropdown, setShowVendorDropdown] = useState(false);
 
   const [selProductId, setSelProductId] = useState('');
+  const supplierContacts = useMemo(
+    () => contacts.filter((c) => (Array.isArray(c.contactTypes) ? c.contactTypes.includes('Supplier') : c.type === ContactType.SUPPLIER)),
+    [contacts]
+  );
+
+  const vendorPool = useMemo<Array<Contact | Supplier>>(() => {
+    const byId = new Map<string, Contact | Supplier>();
+    supplierContacts.forEach((c) => byId.set(c.id, c));
+    suppliers.forEach((s) => {
+      if (!byId.has(s.id)) byId.set(s.id, s);
+    });
+    return Array.from(byId.values());
+  }, [supplierContacts, suppliers]);
+
   const [qty, setQty] = useState(1);
   const [cost, setCost] = useState(0);
 
@@ -50,11 +61,13 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
     setVendorSearch(val);
     setShowVendorDropdown(true);
     setContactId('');
-    if (val.length > 0) {
-      setVendorResults(searchContacts(val, ContactType.SUPPLIER));
-    } else {
-      setVendorResults(searchContacts('', ContactType.SUPPLIER).slice(0, 8));
-    }
+
+    const query = val.trim().toLowerCase();
+    const nextResults = query
+      ? vendorPool.filter((v) => v.name.toLowerCase().includes(query) || (v.mobile || v.phone || '').includes(query))
+      : vendorPool;
+
+    setVendorResults(nextResults.slice(0, 8));
   };
 
   const addItem = () => {
@@ -76,7 +89,7 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
     setCost(0);
   };
 
-  const selectedVendor = useMemo(() => (contactId ? getContactById(contactId) : null), [contactId, getContactById]);
+  const selectedVendor = useMemo(() => (contactId ? vendorPool.find((v) => v.id === contactId) || null : null), [contactId, vendorPool]);
 
   const totals = useMemo(() => {
     return items.reduce((acc, it) => ({
@@ -89,7 +102,7 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
     let resolvedContactId = contactId;
     if (!resolvedContactId && vendorSearch.trim()) {
       const normalized = vendorSearch.trim().toLowerCase();
-      const match = searchContacts(vendorSearch, ContactType.SUPPLIER).find(c => c.name.toLowerCase() === normalized || c.mobile === vendorSearch.trim());
+      const match = vendorPool.find(v => v.name.toLowerCase() === normalized || (v.mobile || v.phone || '') === vendorSearch.trim());
       if (match) resolvedContactId = match.id;
     }
 
@@ -128,10 +141,10 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="relative">
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Supplier Selection</label>
-                <input type="text" value={vendorSearch} onFocus={() => { setShowVendorDropdown(true); setVendorResults(searchContacts(vendorSearch, ContactType.SUPPLIER).slice(0, 8)); }} onBlur={() => setTimeout(() => setShowVendorDropdown(false), 120)} onChange={e => handleVendorSearch(e.target.value)} placeholder="Search vendor name / mobile..." className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600" />
+                <input type="text" value={vendorSearch} onFocus={() => handleVendorSearch(vendorSearch)} onBlur={() => setTimeout(() => setShowVendorDropdown(false), 120)} onChange={e => handleVendorSearch(e.target.value)} placeholder="Search vendor name / mobile..." className="w-full px-5 py-3 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-indigo-600" />
                 {showVendorDropdown && vendorResults.length > 0 && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
-                    {vendorResults.map(v => <button key={v.id} type="button" onMouseDown={(e) => { e.preventDefault(); setContactId(v.id); setVendorSearch(v.name); setVendorResults([]); setShowVendorDropdown(false); }} className="w-full px-5 py-3 text-left text-xs hover:bg-indigo-50 font-bold uppercase border-b border-slate-50">{v.name} ({v.mobile})</button>)}
+                    {vendorResults.map(v => <button key={v.id} type="button" onMouseDown={(e) => { e.preventDefault(); setContactId(v.id); setVendorSearch(v.name); setVendorResults([]); setShowVendorDropdown(false); }} className="w-full px-5 py-3 text-left text-xs hover:bg-indigo-50 font-bold uppercase border-b border-slate-50">{v.name} ({v.mobile || v.phone || 'NA'})</button>)}
                   </div>
                 )}
               </div>
@@ -142,11 +155,11 @@ const NewPurchasePage: React.FC<NewPurchasePageProps> = ({ onBack, editTransacti
               <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Contact No.</p>
-                  <p className="text-xs font-black text-indigo-700">{selectedVendor?.mobile || 'N/A'}</p>
+                  <p className="text-xs font-black text-indigo-700">{selectedVendor?.mobile || selectedVendor?.phone || 'N/A'}</p>
                 </div>
                 <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Vendor Address</p>
-                  <p className="text-xs font-bold text-slate-700">{selectedVendor?.billingAddress || 'N/A'}</p>
+                  <p className="text-xs font-bold text-slate-700">{selectedVendor?.billingAddress || selectedVendor?.address || 'N/A'}</p>
                 </div>
               </div>
               <div>

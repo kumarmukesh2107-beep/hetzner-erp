@@ -378,7 +378,7 @@ const ProductsPage: React.FC = () => {
 
       {activeTab === 'list' && (
         <div className="space-y-4 animate-in fade-in duration-500">
-          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4 no-print">
+          <div className="sticky top-0 z-30 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/90 p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center gap-4 no-print">
              <div className="flex-1 min-w-[200px]">
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest ml-1">Search Keywords</label>
                 <input type="text" placeholder="Name or SKU..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="w-full py-2 px-3 text-xs border border-slate-200 rounded-xl bg-slate-50 focus:ring-2 focus:ring-indigo-500 outline-none font-bold" />

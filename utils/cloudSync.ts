@@ -17,21 +17,11 @@ const getApiKey = (): string => {
 
 const buildUrl = (companyId: string): string => {
   const baseUrl = getBaseUrl();
-  const encodedCompanyId = encodeURIComponent(companyId);
-
   if (!baseUrl) {
-    // Default to same-origin Vercel proxy endpoint.
-    return `/api/sync/${encodedCompanyId}`;
+    throw new Error('Cloud sync base URL is not configured. Set VITE_SYNC_API_BASE_URL.');
   }
 
-  // Supports all formats:
-  // - https://domain.com                 -> /sync/:companyId
-  // - https://domain.com/sync            -> /sync/:companyId
-  // - https://domain.com/api/sync        -> /api/sync/:companyId
-  if (baseUrl.endsWith('/api/sync') || baseUrl.endsWith('/sync')) {
-    return `${baseUrl}/${encodedCompanyId}`;
-  }
-
+  const encodedCompanyId = encodeURIComponent(companyId);
   return `${baseUrl}/sync/${encodedCompanyId}`;
 };
 
@@ -42,7 +32,15 @@ const getHeaders = () => {
   return headers;
 };
 
-export const isCloudSyncConfigured = (): boolean => true;
+export const isCloudSyncConfigured = (): boolean => {
+  const explicitToggle = (import.meta.env.VITE_ENABLE_CLOUD_SYNC as string | undefined)?.trim().toLowerCase();
+  if (explicitToggle === 'true') return true;
+  if (explicitToggle === 'false') return false;
+
+  // Safe default: do not auto-enable cloud reconciliation unless sync env is present.
+  // This prevents accidental overwrite of local ERP data in deployments without intended sync setup.
+  return Boolean(getBaseUrl() || getApiKey());
+};
 
 export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
   const url = buildUrl(companyId);

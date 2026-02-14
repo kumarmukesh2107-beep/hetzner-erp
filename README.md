@@ -49,34 +49,23 @@ Optional env vars:
 
 Set these in your frontend deployment/local `.env`:
 
-- `VITE_SYNC_API_BASE_URL` (optional)
+- `VITE_ENABLE_CLOUD_SYNC` (`true` to force enable, `false` to disable)
+- `VITE_SYNC_API_BASE_URL` (required; example: `http://65.108.221.47:8787`)
 - `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
 
-`VITE_SYNC_API_BASE_URL` accepts all these forms:
+Frontend calls sync directly using:
 
-- `https://your-domain.com` (appends `/sync/:companyId`)
-- `https://your-domain.com/sync` (appends `/:companyId`)
-- `https://your-domain.com/api/sync` (appends `/:companyId`)
+- `${VITE_SYNC_API_BASE_URL}/sync/:companyId`
 
-If omitted, frontend defaults to same-origin `/api/sync/:companyId`.
+Example:
 
-### 3) Vercel API proxy environment (recommended for production)
+- `VITE_SYNC_API_BASE_URL=http://65.108.221.47:8787`
+- Request URL becomes `http://65.108.221.47:8787/sync/:companyId`
 
-Set these on Vercel project env so frontend can safely call same-origin `/api/sync` over HTTPS:
-
-- `NEXUS_SYNC_BACKEND_ORIGIN` (for your server: `http://65.108.221.47:8787`)
-- `NEXUS_SYNC_API_KEY` (optional, forwarded to backend as `X-Nexus-API-Key`)
-
-- `VITE_SYNC_API_BASE_URL` (example: `http://localhost:8787`)
-- `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
-
-When configured, the app automatically:
-
-- pushes local ERP changes to backend,
-- polls backend for newer snapshots,
-- refreshes client state when remote updates are detected.
-
-If not configured, manual backup export/import in Data Import page remains available.
+Cloud sync enablement rules (important):
+- If `VITE_ENABLE_CLOUD_SYNC=true`, sync is enabled.
+- If `VITE_ENABLE_CLOUD_SYNC=false`, sync is disabled.
+- If unset, sync auto-enables only when `VITE_SYNC_API_BASE_URL` or `VITE_SYNC_API_KEY` is present.
 
 ### Merge-conflict safety check
 
@@ -108,7 +97,7 @@ Use this approach:
    - `>>>>>>> ...`
 3. Keep these final values when cleaning up:
    - `README.md`: keep the detailed sync env section + merge-conflict safety section.
-   - `utils/cloudSync.ts`: keep default fallback URL `/api/sync/:companyId` when env is empty.
+   - `utils/cloudSync.ts`: keep direct URL format `${VITE_SYNC_API_BASE_URL}/sync/:companyId`.
    - `package.json`: keep script `check:merge-conflicts`.
    - `utils/persistence.ts`: keep `nexus_last_local_change_at` updates and `nexus-local-state-changed` dispatch.
 4. Run checks locally:
