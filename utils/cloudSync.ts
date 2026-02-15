@@ -8,7 +8,11 @@ export interface CloudSnapshotPayload extends NexusTransferSnapshot {
 
 const getBaseUrl = (): string => {
   const fromEnv = import.meta.env.VITE_SYNC_API_BASE_URL as string | undefined;
-  return (fromEnv || '').trim().replace(/\/$/, '');
+  return (fromEnv || '/sync').trim().replace(/\/$/, '');
+};
+
+const hasSyncEnv = (): boolean => {
+  return Boolean((import.meta.env.VITE_SYNC_API_BASE_URL as string | undefined)?.trim());
 };
 
 const getApiKey = (): string => {
@@ -22,7 +26,8 @@ const buildUrl = (companyId: string): string => {
   }
 
   const encodedCompanyId = encodeURIComponent(companyId);
-  return `${baseUrl}/sync/${encodedCompanyId}`;
+  const syncPrefix = baseUrl.endsWith('/sync') ? baseUrl : `${baseUrl}/sync`;
+  return `${syncPrefix}/${encodedCompanyId}`;
 };
 
 const getHeaders = () => {
@@ -39,7 +44,7 @@ export const isCloudSyncConfigured = (): boolean => {
 
   // Safe default: do not auto-enable cloud reconciliation unless sync env is present.
   // This prevents accidental overwrite of local ERP data in deployments without intended sync setup.
-  return Boolean(getBaseUrl() || getApiKey());
+  return Boolean(hasSyncEnv() || getApiKey());
 };
 
 export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
