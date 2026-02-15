@@ -87,6 +87,43 @@ app.use('/api', productRoutes);
 app.use('/api', salesRoutes);
 app.use('/api', paymentRoutes);
 
+app.get('/api/sync/:companyId', async (req, res, next) => {
+  const { companyId } = req.params;
+  console.log('SYNC GET:', companyId);
+
+  try {
+    const [rows] = await pool.execute(
+      'SELECT data FROM sync_data WHERE company_id = ? ORDER BY updated_at DESC LIMIT 1',
+      [companyId],
+    );
+
+    if (!rows.length) {
+      return res.json({ data: {} });
+    }
+
+    return res.json({ data: rows[0].data ?? {} });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+app.put('/api/sync/:companyId', async (req, res, next) => {
+  const { companyId } = req.params;
+  const data = req.body ?? {};
+  console.log('SYNC PUT:', companyId);
+
+  try {
+    await pool.execute('INSERT INTO sync_data (company_id, data) VALUES (?, ?)', [
+      companyId,
+      JSON.stringify(data),
+    ]);
+
+    return res.json({ success: true });
+  } catch (error) {
+    return next(error);
+  }
+});
+
 // Legacy snapshot API remains active for existing frontend/local-state sync flows.
 app.post('/api/:module', async (req, res, next) => {
   const moduleInfo = resolveModule(req.params.module);
