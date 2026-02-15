@@ -49,6 +49,23 @@ The app now targets Nginx-relative paths instead of direct server IPs.
 
 ## Hetzner deployment (frontend + backend + sync)
 
+
+### Troubleshooting `vite: not found`
+
+If `npm run build` fails with `vite: not found`, dependencies were not installed successfully (or were installed with an unsupported Node version).
+
+Use this sequence:
+
+```bash
+nvm use 22
+rm -rf node_modules package-lock.json
+npm install
+npm run build
+```
+
+This project currently requires Node.js 20.19+ (Node 22 recommended) because of `@vitejs/plugin-react` and `react-router-dom` engine requirements.
+
+
 1. Install dependencies:
 
 ```bash
