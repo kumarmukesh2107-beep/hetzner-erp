@@ -29,38 +29,86 @@ For frontend runtime configuration, define these variables in your deployment en
 
 For backend verification, follow [BACKEND_READINESS_CHECKLIST.md](./BACKEND_READINESS_CHECKLIST.md).
 
-## Multi-device sync backend (new)
+## Multi-device sync backend
 
-This repo now includes a lightweight sync backend service to share ERP state across devices/users.
+This repo includes a lightweight sync backend service to share ERP state across devices/users.
 
-### 1) Start sync backend
+- Sync backend default port: `8788`
+- Backend default port: `4000`
+- Frontend sync base URL should be relative: `VITE_SYNC_API_BASE_URL=/sync`
 
-```bash
-node backend-sync-server.mjs
-```
-
-Optional env vars:
-
-- `SYNC_PORT` (default `8787`)
-- `NEXUS_SYNC_API_KEY` (recommended in production)
-- `NEXUS_SYNC_STORE_FILE` (custom JSON store path)
-
-### 2) Frontend environment
+### Frontend environment
 
 Set these in your frontend deployment/local `.env`:
 
 - `VITE_ENABLE_CLOUD_SYNC` (`true` to force enable, `false` to disable)
-- `VITE_SYNC_API_BASE_URL` (required; example: `http://65.108.221.47:8787`)
+- `VITE_SYNC_API_BASE_URL=/sync`
 - `VITE_SYNC_API_KEY` (must match `NEXUS_SYNC_API_KEY` if configured)
 
-Frontend calls sync directly using:
+The app now targets Nginx-relative paths instead of direct server IPs.
 
-- `${VITE_SYNC_API_BASE_URL}/sync/:companyId`
+## Hetzner deployment (frontend + backend + sync)
 
-Example:
+1. Install dependencies:
 
-- `VITE_SYNC_API_BASE_URL=http://65.108.221.47:8787`
-- Request URL becomes `http://65.108.221.47:8787/sync/:companyId`
+```bash
+npm install
+```
+
+2. Build frontend assets:
+
+```bash
+npm run build
+```
+
+3. Copy env file and adjust secrets:
+
+```bash
+cp .env.example .env
+```
+
+4. Start both Node services with PM2:
+
+```bash
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+5. Nginx reverse proxy (example):
+
+```nginx
+server {
+  listen 80;
+  server_name _;
+
+  location / {
+    root /var/www/nexus-erp/dist;
+    try_files $uri /index.html;
+  }
+
+  location /api/ {
+    proxy_pass http://127.0.0.1:4000/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location /sync/ {
+    proxy_pass http://127.0.0.1:8788/sync/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+  }
+
+  location /uploads/ {
+    proxy_pass http://127.0.0.1:4000/uploads/;
+  }
+}
+```
 
 Cloud sync enablement rules (important):
 - If `VITE_ENABLE_CLOUD_SYNC=true`, sync is enabled.
@@ -97,7 +145,7 @@ Use this approach:
    - `>>>>>>> ...`
 3. Keep these final values when cleaning up:
    - `README.md`: keep the detailed sync env section + merge-conflict safety section.
-   - `utils/cloudSync.ts`: keep direct URL format `${VITE_SYNC_API_BASE_URL}/sync/:companyId`.
+   - `utils/cloudSync.ts`: keep relative sync URL support (`VITE_SYNC_API_BASE_URL=/sync`) and company path composition.
    - `package.json`: keep script `check:merge-conflicts`.
    - `utils/persistence.ts`: keep `nexus_last_local_change_at` updates and `nexus-local-state-changed` dispatch.
 4. Run checks locally:
