@@ -171,5 +171,6 @@ Use this approach:
 npm run check:merge-conflicts
 npm run build
 ```
+Test deploy
 
 Only push once both commands pass.
