@@ -66,6 +66,7 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
 
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isRemoteSyncReady, setIsRemoteSyncReady] = useState(false);
 
   useEffect(() => {
     const saved = loadLocalState<any | null>(CONTACT_STORAGE_KEY, null);
@@ -76,19 +77,26 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !isRemoteSyncReady) return;
     saveLocalState(CONTACT_STORAGE_KEY, { contacts: allContacts });
     postModuleSnapshot('contacts', { contacts: allContacts });
-  }, [allContacts, isHydrated]);
+  }, [allContacts, isHydrated, isRemoteSyncReady]);
 
   useEffect(() => {
     let mounted = true;
-    getModuleSnapshot<{ contacts?: Contact[] }>('contacts').then(snapshot => {
+    const refreshFromApi = () => getModuleSnapshot<{ contacts?: Contact[] }>('contacts').then(snapshot => {
       if (!mounted || !snapshot) return;
-      if (Array.isArray(snapshot.contacts) && snapshot.contacts.length > 0) setAllContacts(snapshot.contacts);
+      if (Array.isArray(snapshot.contacts)) setAllContacts(snapshot.contacts);
+    }).finally(() => {
+      if (mounted) setIsRemoteSyncReady(true);
     });
+
+    refreshFromApi();
+    const intervalId = window.setInterval(refreshFromApi, 5000);
+
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 

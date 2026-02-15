@@ -68,6 +68,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   ]);
 
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isRemoteSyncReady, setIsRemoteSyncReady] = useState(false);
 
   useEffect(() => {
     const saved = loadLocalState<any | null>(ACCOUNTING_STORAGE_KEY, null);
@@ -80,7 +81,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !isRemoteSyncReady) return;
     const snapshot = {
       ledger: allLedger,
       expenses: allExpenses,
@@ -89,18 +90,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     saveLocalState(ACCOUNTING_STORAGE_KEY, snapshot);
     postModuleSnapshot('accounting', snapshot);
     postModuleSnapshot('expenses', allExpenses);
-  }, [allLedger, allExpenses, expenseCategories, isHydrated]);
+  }, [allLedger, allExpenses, expenseCategories, isHydrated, isRemoteSyncReady]);
 
   useEffect(() => {
     let mounted = true;
-    getModuleSnapshot<{ ledger?: LedgerEntry[]; expenses?: ExpenseRecord[]; expenseCategories?: string[] }>('accounting').then(snapshot => {
+    const refreshFromApi = () => getModuleSnapshot<{ ledger?: LedgerEntry[]; expenses?: ExpenseRecord[]; expenseCategories?: string[] }>('accounting').then(snapshot => {
       if (!mounted || !snapshot) return;
-      if (Array.isArray(snapshot.ledger) && snapshot.ledger.length > 0) setAllLedger(snapshot.ledger);
+      if (Array.isArray(snapshot.ledger)) setAllLedger(snapshot.ledger);
       if (Array.isArray(snapshot.expenses)) setAllExpenses(snapshot.expenses);
-      if (Array.isArray(snapshot.expenseCategories) && snapshot.expenseCategories.length > 0) setExpenseCategories(snapshot.expenseCategories);
+      if (Array.isArray(snapshot.expenseCategories)) setExpenseCategories(snapshot.expenseCategories);
+    }).finally(() => {
+      if (mounted) setIsRemoteSyncReady(true);
     });
+
+    refreshFromApi();
+    const intervalId = window.setInterval(refreshFromApi, 5000);
+
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 
