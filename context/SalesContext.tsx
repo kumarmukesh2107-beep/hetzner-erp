@@ -86,13 +86,18 @@ export const SalesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     let mounted = true;
-    getModuleSnapshot<{ sales?: SalesTransaction[]; salesLogs?: SalesLog[] }>('sales').then(snapshot => {
+    const refreshFromApi = () => getModuleSnapshot<{ sales?: SalesTransaction[]; salesLogs?: SalesLog[] }>('sales').then(snapshot => {
       if (!mounted || !snapshot) return;
       if (Array.isArray(snapshot.sales) && snapshot.sales.length > 0) setAllSales(snapshot.sales);
       if (Array.isArray(snapshot.salesLogs)) setAllSalesLogs(snapshot.salesLogs);
     });
+
+    refreshFromApi();
+    const intervalId = window.setInterval(refreshFromApi, 5000);
+
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 

@@ -167,7 +167,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     let mounted = true;
-    getModuleSnapshot<any>('inventory').then(snapshot => {
+    const refreshFromApi = () => getModuleSnapshot<any>('inventory').then(snapshot => {
       if (!mounted || !snapshot || typeof snapshot !== 'object') return;
       if (Array.isArray(snapshot.products) && snapshot.products.length > 0) setAllProducts(snapshot.products);
       if (Array.isArray(snapshot.categories)) setAllCategories(snapshot.categories);
@@ -175,8 +175,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (Array.isArray(snapshot.transfers)) setAllTransfers(snapshot.transfers);
       if (Array.isArray(snapshot.manualTransactions)) setAllManualTransactions(snapshot.manualTransactions);
     });
+
+    refreshFromApi();
+    const intervalId = window.setInterval(refreshFromApi, 5000);
+
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 
