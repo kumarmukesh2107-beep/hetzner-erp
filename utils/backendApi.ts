@@ -1,6 +1,7 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const rawBase = (import.meta.env.VITE_SYNC_API_BASE_URL || import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const API_BASE = rawBase.endsWith('/api') ? rawBase : `${rawBase}/api`;
 
-const toUrl = (moduleName: string) => `${API_BASE}/api/${encodeURIComponent(moduleName)}`;
+const toUrl = (moduleName: string) => `${API_BASE}/${encodeURIComponent(moduleName)}`;
 
 export const postModuleSnapshot = async (moduleName: string, payload: unknown): Promise<void> => {
   try {
