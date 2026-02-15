@@ -9,6 +9,24 @@ const __filename = fileURLToPath(import.meta.url);
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const uploadsDir = path.resolve('uploads');
+import path from 'path';
+import fs from 'fs';
+import cors from 'cors';
+import { fileURLToPath } from 'url';
+
+// Fix __dirname in ES module
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 4000;
+
+// middleware
+app.use(cors());
+app.use(express.json());
+
+// ===== CREATE UPLOADS FOLDER =====
+const uploadsDir = path.join(__dirname, 'uploads');
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -36,31 +54,20 @@ const storage = multer.diskStorage({
     const baseName = path
       .basename(file.originalname, extension)
       .replace(/[^a-zA-Z0-9-_]/g, '-')
+// ===== MULTER STORAGE =====
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const name = path
+      .basename(file.originalname, ext)
+      .replace(/[^a-zA-Z0-9]/g, '-')
       .toLowerCase();
 
-    cb(null, `${baseName || 'image'}-${Date.now()}${extension}`);
-  },
-});
-
-const fileFilter = (_req, file, cb) => {
-  const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-  const allowedExtensions = ['.jpg', '.jpeg', '.png'];
-
-  const extension = path.extname(file.originalname).toLowerCase();
-  const isMimeAllowed = allowedMimeTypes.includes((file.mimetype || '').toLowerCase());
-  const isExtensionAllowed = allowedExtensions.includes(extension);
-
-  if (isMimeAllowed && isExtensionAllowed) {
-    return cb(null, true);
+    cb(null, `${name}-${Date.now()}${ext}`);
   }
-
-  return cb(new Error('Only jpg, jpeg, and png files are allowed'));
-};
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter,
 });
 
 app.get('/health', (_req, res) => {
@@ -78,9 +85,14 @@ const uploadHandler = (req, res) => {
 
       return res.status(400).json({ error: error.message || 'Upload failed' });
     }
+const upload = multer({ storage });
+>>>>>>> 3775ab4 (stable production setup)
 
+// ===== UPLOAD API =====
+app.post('/upload', upload.single('file'), (req, res) => {
+  try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No image file uploaded' });
+      return res.status(400).json({ error: 'No file uploaded' });
     }
 
     return res.status(200).json({
@@ -112,3 +124,25 @@ if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
 }
 
 export default app;
+    res.json({
+      success: true,
+      url: `/uploads/${req.file.filename}`
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+// ===== SERVE FILES =====
+app.use('/uploads', express.static(uploadsDir));
+
+// ===== TEST ROUTE =====
+app.get('/', (req, res) => {
+  res.send('ERP Backend Running 🚀');
+});
+
+// ===== START SERVER =====
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
