@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { Customer } from '../types';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface CustomerContextType {
@@ -57,7 +58,19 @@ export const CustomerProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     if (!isHydrated) return;
     saveLocalState(CUSTOMER_STORAGE_KEY, { customers });
+    postModuleSnapshot('customers', { customers });
   }, [customers, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<{ customers?: Customer[] }>('customers').then(snapshot => {
+      if (!mounted || !snapshot) return;
+      if (Array.isArray(snapshot.customers) && snapshot.customers.length > 0) setCustomers(snapshot.customers);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const getCustomerByMobile = useCallback((mobile: string) => {
     return customers.find(c => c.mobile === mobile);

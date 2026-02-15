@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { Contact, ContactType, ContactCategory, CONTACT_CATEGORIES } from '../types';
 import { useAccounting } from './AccountingContext';
 import { useCompany } from './CompanyContext';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface ContactImportResult {
@@ -77,7 +78,19 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!isHydrated) return;
     saveLocalState(CONTACT_STORAGE_KEY, { contacts: allContacts });
+    postModuleSnapshot('contacts', { contacts: allContacts });
   }, [allContacts, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<{ contacts?: Contact[] }>('contacts').then(snapshot => {
+      if (!mounted || !snapshot) return;
+      if (Array.isArray(snapshot.contacts) && snapshot.contacts.length > 0) setAllContacts(snapshot.contacts);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const contacts = useMemo(() => 
     allContacts.filter(c => c.companyId === activeCompany?.id), 

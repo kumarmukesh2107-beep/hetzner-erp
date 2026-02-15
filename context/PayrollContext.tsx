@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { Employee, Holiday, PayrollRecord, DailyAttendance, AttendanceStatus } from '../types';
 import { useAccounting } from './AccountingContext';
 import { useCompany } from './CompanyContext';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface PayrollContextType {
@@ -67,13 +68,29 @@ export const PayrollProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     if (!isHydrated) return;
-    saveLocalState(PAYROLL_STORAGE_KEY, {
+    const snapshot = {
       employees: allEmployees,
       holidays: allHolidays,
       payrollHistory: allPayrollHistory,
       dailyAttendance: allDailyAttendance,
-    });
+    };
+    saveLocalState(PAYROLL_STORAGE_KEY, snapshot);
+    postModuleSnapshot('payroll', snapshot);
   }, [allEmployees, allHolidays, allPayrollHistory, allDailyAttendance, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<any>('payroll').then(snapshot => {
+      if (!mounted || !snapshot || typeof snapshot !== 'object') return;
+      if (Array.isArray(snapshot.employees) && snapshot.employees.length > 0) setAllEmployees(snapshot.employees);
+      if (Array.isArray(snapshot.holidays)) setAllHolidays(snapshot.holidays);
+      if (Array.isArray(snapshot.payrollHistory)) setAllPayrollHistory(snapshot.payrollHistory);
+      if (Array.isArray(snapshot.dailyAttendance)) setAllDailyAttendance(snapshot.dailyAttendance);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Normalize disbursal split: default all salary to PDC, only bankLimit-defined amounts go to bank transfer.
   useEffect(() => {

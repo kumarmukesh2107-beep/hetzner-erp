@@ -4,6 +4,7 @@ import { Supplier, PurchaseTransaction, PurchaseStatus, PaymentStatus, Warehouse
 import { useInventory } from './InventoryContext';
 import { useAccounting } from './AccountingContext';
 import { useCompany } from './CompanyContext';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface PurchaseContextType {
@@ -50,7 +51,20 @@ export const PurchaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   useEffect(() => {
     if (!isHydrated) return;
     saveLocalState(PURCHASE_STORAGE_KEY, { suppliers: allSuppliers, purchases: allPurchases });
+    postModuleSnapshot('purchases', { suppliers: allSuppliers, purchases: allPurchases });
   }, [allSuppliers, allPurchases, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<{ suppliers?: Supplier[]; purchases?: PurchaseTransaction[] }>('purchases').then(snapshot => {
+      if (!mounted || !snapshot) return;
+      if (Array.isArray(snapshot.suppliers) && snapshot.suppliers.length > 0) setAllSuppliers(snapshot.suppliers);
+      if (Array.isArray(snapshot.purchases) && snapshot.purchases.length > 0) setAllPurchases(snapshot.purchases);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const suppliers = useMemo(() => 
     allSuppliers.filter(s => s.companyId === activeCompany?.id), 

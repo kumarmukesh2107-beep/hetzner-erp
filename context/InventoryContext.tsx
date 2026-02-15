@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useEf
 import { Product, WarehouseType, WarehouseStock, StockTransfer, ManualTransaction, ProductCategory } from '../types';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState, loadInventoryImages, saveInventoryImages } from '../utils/persistence';
 
 interface ImportResult { 
@@ -157,10 +158,27 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     };
 
     saveLocalState(INVENTORY_STORAGE_KEY, snapshot);
+    postModuleSnapshot('inventory', snapshot);
+    postModuleSnapshot('products', snapshot.products);
     saveInventoryImages(imagesByProductId).catch((error) => {
       console.warn('Failed to persist inventory images:', error);
     });
   }, [allProducts, allCategories, allStocks, allTransfers, allManualTransactions, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<any>('inventory').then(snapshot => {
+      if (!mounted || !snapshot || typeof snapshot !== 'object') return;
+      if (Array.isArray(snapshot.products) && snapshot.products.length > 0) setAllProducts(snapshot.products);
+      if (Array.isArray(snapshot.categories)) setAllCategories(snapshot.categories);
+      if (Array.isArray(snapshot.stocks)) setAllStocks(snapshot.stocks);
+      if (Array.isArray(snapshot.transfers)) setAllTransfers(snapshot.transfers);
+      if (Array.isArray(snapshot.manualTransactions)) setAllManualTransactions(snapshot.manualTransactions);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Products filter now excludes SHADOW / HISTORICAL products from Live Catalog
   const products = useMemo(() => allProducts.filter(p => p.companyId === activeCompany?.id && !p.isHistorical), [allProducts, activeCompany]);

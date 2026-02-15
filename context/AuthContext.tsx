@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User, UserRole, AuthState } from '../types';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 
 interface AuthContextType extends AuthState {
   users: User[];
@@ -72,6 +73,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } else {
       setAuthState(prev => ({ ...prev, isLoading: false }));
     }
+  }, [users]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<User[]>('users').then(snapshot => {
+      if (!mounted || !Array.isArray(snapshot) || snapshot.length === 0) return;
+      setUsers(snapshot);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    postModuleSnapshot('users', users);
   }, [users]);
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
