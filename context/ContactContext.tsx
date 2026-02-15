@@ -83,12 +83,17 @@ export const ContactProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   useEffect(() => {
     let mounted = true;
-    getModuleSnapshot<{ contacts?: Contact[] }>('contacts').then(snapshot => {
+    const refreshFromApi = () => getModuleSnapshot<{ contacts?: Contact[] }>('contacts').then(snapshot => {
       if (!mounted || !snapshot) return;
       if (Array.isArray(snapshot.contacts) && snapshot.contacts.length > 0) setAllContacts(snapshot.contacts);
     });
+
+    refreshFromApi();
+    const intervalId = window.setInterval(refreshFromApi, 5000);
+
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 

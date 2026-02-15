@@ -56,13 +56,18 @@ export const PurchaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   useEffect(() => {
     let mounted = true;
-    getModuleSnapshot<{ suppliers?: Supplier[]; purchases?: PurchaseTransaction[] }>('purchases').then(snapshot => {
+    const refreshFromApi = () => getModuleSnapshot<{ suppliers?: Supplier[]; purchases?: PurchaseTransaction[] }>('purchases').then(snapshot => {
       if (!mounted || !snapshot) return;
       if (Array.isArray(snapshot.suppliers) && snapshot.suppliers.length > 0) setAllSuppliers(snapshot.suppliers);
       if (Array.isArray(snapshot.purchases) && snapshot.purchases.length > 0) setAllPurchases(snapshot.purchases);
     });
+
+    refreshFromApi();
+    const intervalId = window.setInterval(refreshFromApi, 5000);
+
     return () => {
       mounted = false;
+      window.clearInterval(intervalId);
     };
   }, []);
 
