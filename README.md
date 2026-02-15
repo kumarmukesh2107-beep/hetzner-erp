@@ -70,7 +70,7 @@ cp .env.example .env
 4. Start both Node services with PM2:
 
 ```bash
-pm2 start ecosystem.config.js
+pm2 start ecosystem.config.cjs
 pm2 save
 ```
 
