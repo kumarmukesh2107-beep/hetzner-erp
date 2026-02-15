@@ -5,6 +5,7 @@ import { useInventory } from './InventoryContext';
 import { useAccounting } from './AccountingContext';
 import { useAuth } from './AuthContext';
 import { useCompany } from './CompanyContext';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface SalesContextType {
@@ -80,7 +81,20 @@ export const SalesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     if (!isHydrated) return;
     saveLocalState(SALES_STORAGE_KEY, { sales: allSales, salesLogs: allSalesLogs });
+    postModuleSnapshot('sales', { sales: allSales, salesLogs: allSalesLogs });
   }, [allSales, allSalesLogs, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<{ sales?: SalesTransaction[]; salesLogs?: SalesLog[] }>('sales').then(snapshot => {
+      if (!mounted || !snapshot) return;
+      if (Array.isArray(snapshot.sales) && snapshot.sales.length > 0) setAllSales(snapshot.sales);
+      if (Array.isArray(snapshot.salesLogs)) setAllSalesLogs(snapshot.salesLogs);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const sales = useMemo(() => allSales.filter(s => s.companyId === activeCompany?.id), [allSales, activeCompany]);
   const salesLogs = useMemo(() => allSalesLogs.filter(l => l.companyId === activeCompany?.id), [allSalesLogs, activeCompany]);

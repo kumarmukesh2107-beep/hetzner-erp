@@ -1,6 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Company } from '../types';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface CompanyContextType {
@@ -81,7 +82,19 @@ export const CompanyProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (!isHydrated) return;
     saveLocalState(COMPANY_STORAGE_KEY, { companies });
+    postModuleSnapshot('companies', { companies });
   }, [companies, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<{ companies?: Company[] }>('companies').then(snapshot => {
+      if (!mounted || !snapshot) return;
+      if (Array.isArray(snapshot.companies) && snapshot.companies.length > 0) setCompanies(snapshot.companies);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

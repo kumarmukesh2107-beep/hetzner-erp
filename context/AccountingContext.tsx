@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { AccountType, FinancialAccount, ExpenseRecord, LedgerEntry, TransactionType, Product } from '../types';
 import { useCompany } from './CompanyContext';
+import { getModuleSnapshot, postModuleSnapshot } from '../utils/backendApi';
 import { loadLocalState, saveLocalState } from '../utils/persistence';
 
 interface CashFlowBreakdown {
@@ -80,12 +81,28 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   useEffect(() => {
     if (!isHydrated) return;
-    saveLocalState(ACCOUNTING_STORAGE_KEY, {
+    const snapshot = {
       ledger: allLedger,
       expenses: allExpenses,
       expenseCategories,
-    });
+    };
+    saveLocalState(ACCOUNTING_STORAGE_KEY, snapshot);
+    postModuleSnapshot('accounting', snapshot);
+    postModuleSnapshot('expenses', allExpenses);
   }, [allLedger, allExpenses, expenseCategories, isHydrated]);
+
+  useEffect(() => {
+    let mounted = true;
+    getModuleSnapshot<{ ledger?: LedgerEntry[]; expenses?: ExpenseRecord[]; expenseCategories?: string[] }>('accounting').then(snapshot => {
+      if (!mounted || !snapshot) return;
+      if (Array.isArray(snapshot.ledger) && snapshot.ledger.length > 0) setAllLedger(snapshot.ledger);
+      if (Array.isArray(snapshot.expenses)) setAllExpenses(snapshot.expenses);
+      if (Array.isArray(snapshot.expenseCategories) && snapshot.expenseCategories.length > 0) setExpenseCategories(snapshot.expenseCategories);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const ledger = useMemo(() => allLedger.filter(l => l.companyId === activeCompany?.id), [allLedger, activeCompany]);
   const expenses = useMemo(() => allExpenses.filter(e => e.companyId === activeCompany?.id), [allExpenses, activeCompany]);
