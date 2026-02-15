@@ -79,4 +79,13 @@ export async function ensureSchema(pool) {
       FOREIGN KEY (sale_id) REFERENCES sales(id)
     )
   `);
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS sync_data (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      company_id VARCHAR(100),
+      data JSON,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    )
+  `);
 }
