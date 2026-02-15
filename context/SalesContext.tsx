@@ -68,6 +68,7 @@ export const SalesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [allSalesLogs, setAllSalesLogs] = useState<SalesLog[]>([]);
 
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isRemoteSyncReady, setIsRemoteSyncReady] = useState(false);
 
   useEffect(() => {
     const saved = loadLocalState<any | null>(SALES_STORAGE_KEY, null);
@@ -79,17 +80,19 @@ export const SalesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !isRemoteSyncReady) return;
     saveLocalState(SALES_STORAGE_KEY, { sales: allSales, salesLogs: allSalesLogs });
     postModuleSnapshot('sales', { sales: allSales, salesLogs: allSalesLogs });
-  }, [allSales, allSalesLogs, isHydrated]);
+  }, [allSales, allSalesLogs, isHydrated, isRemoteSyncReady]);
 
   useEffect(() => {
     let mounted = true;
     const refreshFromApi = () => getModuleSnapshot<{ sales?: SalesTransaction[]; salesLogs?: SalesLog[] }>('sales').then(snapshot => {
       if (!mounted || !snapshot) return;
-      if (Array.isArray(snapshot.sales) && snapshot.sales.length > 0) setAllSales(snapshot.sales);
+      if (Array.isArray(snapshot.sales)) setAllSales(snapshot.sales);
       if (Array.isArray(snapshot.salesLogs)) setAllSalesLogs(snapshot.salesLogs);
+    }).finally(() => {
+      if (mounted) setIsRemoteSyncReady(true);
     });
 
     refreshFromApi();

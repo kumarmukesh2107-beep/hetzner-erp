@@ -38,6 +38,7 @@ export const PurchaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [allPurchases, setAllPurchases] = useState<PurchaseTransaction[]>([]);
 
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isRemoteSyncReady, setIsRemoteSyncReady] = useState(false);
 
   useEffect(() => {
     const saved = loadLocalState<any | null>(PURCHASE_STORAGE_KEY, null);
@@ -49,17 +50,19 @@ export const PurchaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !isRemoteSyncReady) return;
     saveLocalState(PURCHASE_STORAGE_KEY, { suppliers: allSuppliers, purchases: allPurchases });
     postModuleSnapshot('purchases', { suppliers: allSuppliers, purchases: allPurchases });
-  }, [allSuppliers, allPurchases, isHydrated]);
+  }, [allSuppliers, allPurchases, isHydrated, isRemoteSyncReady]);
 
   useEffect(() => {
     let mounted = true;
     const refreshFromApi = () => getModuleSnapshot<{ suppliers?: Supplier[]; purchases?: PurchaseTransaction[] }>('purchases').then(snapshot => {
       if (!mounted || !snapshot) return;
-      if (Array.isArray(snapshot.suppliers) && snapshot.suppliers.length > 0) setAllSuppliers(snapshot.suppliers);
-      if (Array.isArray(snapshot.purchases) && snapshot.purchases.length > 0) setAllPurchases(snapshot.purchases);
+      if (Array.isArray(snapshot.suppliers)) setAllSuppliers(snapshot.suppliers);
+      if (Array.isArray(snapshot.purchases)) setAllPurchases(snapshot.purchases);
+    }).finally(() => {
+      if (mounted) setIsRemoteSyncReady(true);
     });
 
     refreshFromApi();
