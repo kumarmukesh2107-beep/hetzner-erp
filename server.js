@@ -1,10 +1,17 @@
 import cors from 'cors';
 import express from 'express';
-import mysql from 'mysql2/promise';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { pool } from './db/pool.js';
+import { ensureSchema } from './db/schema.js';
+import { loadModuleData, resolveModule, saveModuleData } from './db/legacyStore.js';
+import authRoutes from './routes/authRoutes.js';
+import customerRoutes from './routes/customerRoutes.js';
+import productRoutes from './routes/productRoutes.js';
+import salesRoutes from './routes/salesRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,88 +19,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const uploadsDir = path.join(__dirname, 'uploads');
-const API_MODULES = {
-  sales: 'sales',
-  inventory: 'inventory',
-  products: 'products',
-  users: 'users',
-  purchases: 'purchases',
-  contacts: 'contacts',
-  expenses: 'expenses',
-  accounting: 'accounting',
-  payroll: 'payroll',
-  companies: 'companies',
-  customers: 'customers',
-};
 
-const memoryStore = new Map();
-
-const dbConfig = {
-  host: process.env.DB_HOST,
-  port: Number(process.env.DB_PORT || 3306),
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-};
-
-const hasDbConfig = Boolean(dbConfig.host && dbConfig.user && dbConfig.database);
-const pool = hasDbConfig
-  ? mysql.createPool({
-      ...dbConfig,
-      waitForConnections: true,
-      connectionLimit: Number(process.env.DB_POOL_SIZE || 10),
-      namedPlaceholders: true,
-    })
-  : null;
-
-async function ensureTables() {
-  if (!pool) return;
-  for (const table of Object.values(API_MODULES)) {
-    await pool.execute(`
-      CREATE TABLE IF NOT EXISTS \`${table}\` (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        data JSON,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-  }
-}
-
-ensureTables().catch(error => {
-  console.error('[db] table initialization failed:', error?.message || error);
+ensureSchema(pool).catch(error => {
+  console.error('[db] schema initialization failed:', error?.message || error);
 });
-
-function resolveModule(req) {
-  const moduleKey = String(req.params.module || '').toLowerCase();
-  const table = API_MODULES[moduleKey];
-  if (!table) return null;
-  return { moduleKey, table };
-}
-
-async function saveModuleData(table, payload) {
-  if (!pool) {
-    memoryStore.set(table, payload);
-    return;
-  }
-  await pool.execute(`INSERT INTO \`${table}\` (data) VALUES (CAST(? AS JSON))`, [JSON.stringify(payload)]);
-}
-
-async function loadModuleData(table) {
-  if (!pool) {
-    return memoryStore.get(table) ?? [];
-  }
-  const [rows] = await pool.query(`SELECT data FROM \`${table}\` ORDER BY id DESC LIMIT 1`);
-  if (!Array.isArray(rows) || rows.length === 0) return [];
-  const latest = rows[0]?.data;
-  if (typeof latest === 'string') {
-    try {
-      return JSON.parse(latest);
-    } catch {
-      return [];
-    }
-  }
-  return latest ?? [];
-}
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -151,12 +80,20 @@ function uploadHandler(req, res) {
 app.post('/upload', uploadHandler);
 app.post('/api/upload', uploadHandler);
 
+// New structured relational routes (kept alongside legacy endpoints for backward compatibility)
+app.use('/api/auth', authRoutes);
+app.use('/api', customerRoutes);
+app.use('/api', productRoutes);
+app.use('/api', salesRoutes);
+app.use('/api', paymentRoutes);
+
+// Legacy snapshot API remains active for existing frontend/local-state sync flows.
 app.post('/api/:module', async (req, res, next) => {
-  const moduleInfo = resolveModule(req);
+  const moduleInfo = resolveModule(req.params.module);
   if (!moduleInfo) return res.status(404).json({ error: 'Unknown module' });
 
   try {
-    await saveModuleData(moduleInfo.table, req.body ?? {});
+    await saveModuleData(pool, moduleInfo.table, req.body ?? {});
     return res.status(200).json({ ok: true, module: moduleInfo.moduleKey });
   } catch (error) {
     return next(error);
@@ -164,11 +101,11 @@ app.post('/api/:module', async (req, res, next) => {
 });
 
 app.get('/api/:module', async (req, res, next) => {
-  const moduleInfo = resolveModule(req);
+  const moduleInfo = resolveModule(req.params.module);
   if (!moduleInfo) return res.status(404).json({ error: 'Unknown module' });
 
   try {
-    const data = await loadModuleData(moduleInfo.table);
+    const data = await loadModuleData(pool, moduleInfo.table);
     return res.status(200).json(data);
   } catch (error) {
     return next(error);
@@ -182,6 +119,10 @@ app.use((error, _req, res, _next) => {
 
   if (error?.type === 'encoding.unsupported') {
     return res.status(415).json({ error: 'Unsupported content encoding' });
+  }
+
+  if (error?.message?.includes('Insufficient stock')) {
+    return res.status(400).json({ error: error.message });
   }
 
   return res.status(500).json({ error: 'Internal server error' });
