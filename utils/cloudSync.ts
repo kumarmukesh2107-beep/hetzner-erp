@@ -6,9 +6,11 @@ export interface CloudSnapshotPayload extends NexusTransferSnapshot {
   updatedAt: string;
 }
 
+const DEFAULT_SYNC_BASE = '/sync';
+
 const getBaseUrl = (): string => {
   const fromEnv = import.meta.env.VITE_SYNC_API_BASE_URL as string | undefined;
-  return (fromEnv || '/sync').trim().replace(/\/$/, '');
+  return (fromEnv || DEFAULT_SYNC_BASE).trim().replace(/\/$/, '');
 };
 
 const hasSyncEnv = (): boolean => {
@@ -19,15 +21,34 @@ const getApiKey = (): string => {
   return (import.meta.env.VITE_SYNC_API_KEY as string | undefined) || '';
 };
 
-const buildUrl = (companyId: string): string => {
+const normalizeSyncPrefix = (baseUrl: string): string => {
+  if (baseUrl.endsWith('/sync')) return baseUrl;
+  if (baseUrl.endsWith('/api/sync')) return baseUrl;
+  if (baseUrl.endsWith('/api')) return `${baseUrl}/sync`;
+  return `${baseUrl}/sync`;
+};
+
+const buildPrimaryUrl = (companyId: string): string => {
   const baseUrl = getBaseUrl();
   if (!baseUrl) {
     throw new Error('Cloud sync base URL is not configured. Set VITE_SYNC_API_BASE_URL.');
   }
 
   const encodedCompanyId = encodeURIComponent(companyId);
-  const syncPrefix = baseUrl.endsWith('/sync') ? baseUrl : `${baseUrl}/sync`;
+  const syncPrefix = normalizeSyncPrefix(baseUrl);
   return `${syncPrefix}/${encodedCompanyId}`;
+};
+
+const buildFallbackUrl = (primaryUrl: string): string | null => {
+  if (primaryUrl.includes('/api/sync/')) {
+    return primaryUrl.replace('/api/sync/', '/sync/');
+  }
+
+  if (primaryUrl.includes('/sync/')) {
+    return primaryUrl.replace('/sync/', '/api/sync/');
+  }
+
+  return null;
 };
 
 const getHeaders = () => {
@@ -35,6 +56,16 @@ const getHeaders = () => {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers['X-Nexus-API-Key'] = apiKey;
   return headers;
+};
+
+const fetchWithSyncFallback = async (url: string, init: RequestInit): Promise<Response> => {
+  const primary = await fetch(url, init);
+  if (primary.status !== 404) return primary;
+
+  const fallbackUrl = buildFallbackUrl(url);
+  if (!fallbackUrl || fallbackUrl === url) return primary;
+
+  return fetch(fallbackUrl, init);
 };
 
 export const isCloudSyncConfigured = (): boolean => {
@@ -48,7 +79,7 @@ export const isCloudSyncConfigured = (): boolean => {
 };
 
 export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
-  const url = buildUrl(companyId);
+  const url = buildPrimaryUrl(companyId);
   const localSnapshot = await exportDeviceSnapshot();
 
   const payload: CloudSnapshotPayload = {
@@ -58,7 +89,7 @@ export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
     updatedAt: new Date().toISOString(),
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithSyncFallback(url, {
     method: 'PUT',
     headers: getHeaders(),
     body: JSON.stringify({ snapshot: payload }),
@@ -70,9 +101,9 @@ export const pushCloudSnapshot = async (companyId: string): Promise<void> => {
 };
 
 export const pullCloudSnapshot = async (companyId: string): Promise<CloudSnapshotPayload | null> => {
-  const url = buildUrl(companyId);
+  const url = buildPrimaryUrl(companyId);
 
-  const response = await fetch(url, {
+  const response = await fetchWithSyncFallback(url, {
     method: 'GET',
     headers: getHeaders(),
   });
@@ -80,7 +111,7 @@ export const pullCloudSnapshot = async (companyId: string): Promise<CloudSnapsho
   if (!response.ok) return null;
 
   const data = await response.json();
-  const snapshot = data?.snapshot;
+  const snapshot = data?.snapshot ?? data?.data?.snapshot ?? data?.data;
   if (!snapshot || typeof snapshot !== 'object') return null;
   return snapshot as CloudSnapshotPayload;
 };
