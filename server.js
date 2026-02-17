@@ -1,5 +1,6 @@
 import cors from 'cors';
 import express from 'express';
+import mysql from 'mysql2';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,8 +18,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = Number(process.env.PORT || 4000);
+const PORT = process.env.PORT || 8788;
+const db = mysql.createConnection({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'erp_user',
+  password: process.env.DB_PASSWORD || 'Erp@12345',
+  database: process.env.DB_NAME || 'erp_db',
+});
 const uploadsDir = path.join(__dirname, 'uploads');
+
+db.connect(err => {
+  if (err) console.error('DB ERROR:', err);
+  else console.log('MySQL Connected');
+});
 
 ensureSchema(pool).catch(error => {
   console.error('[db] schema initialization failed:', error?.message || error);
@@ -165,10 +177,8 @@ app.use((error, _req, res, _next) => {
   return res.status(500).json({ error: 'Internal server error' });
 });
 
-if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 export default app;
