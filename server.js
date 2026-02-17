@@ -1,5 +1,7 @@
 import cors from 'cors';
 import express from 'express';
+import dotenv from 'dotenv';
+import mysql from 'mysql2';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,12 +15,27 @@ import productRoutes from './routes/productRoutes.js';
 import salesRoutes from './routes/salesRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 
+dotenv.config();
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = Number(process.env.PORT || 4000);
+const PORT = process.env.PORT || 8788;
+const db = mysql.createConnection({
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'erp_user',
+  password: process.env.DB_PASSWORD || 'Erp@12345',
+  database: process.env.DB_NAME || 'erp_db',
+});
 const uploadsDir = path.join(__dirname, 'uploads');
+
+db.connect(err => {
+  if (err) console.error('DB ERROR:', err);
+  else console.log('MySQL Connected');
+});
+
+const dbClient = db.promise();
 
 ensureSchema(pool).catch(error => {
   console.error('[db] schema initialization failed:', error?.message || error);
@@ -54,6 +71,10 @@ app.get('/health', (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
+app.get('/api/test', (_req, res) => {
+  res.json({ message: 'API working' });
+});
+
 app.use('/uploads', express.static(uploadsDir));
 
 function uploadHandler(req, res) {
@@ -87,12 +108,46 @@ app.use('/api', productRoutes);
 app.use('/api', salesRoutes);
 app.use('/api', paymentRoutes);
 
+const modules = ['sales', 'products', 'inventory', 'contacts', 'purchases'];
+
+for (const table of modules) {
+  app.get(`/api/${table}`, async (_req, res, next) => {
+    try {
+      const [rows] = await dbClient.query(`SELECT data FROM ${table}`);
+      const data = rows.map(row => {
+        if (typeof row.data === 'string') {
+          try {
+            return JSON.parse(row.data);
+          } catch (_error) {
+            return row.data;
+          }
+        }
+
+        return row.data;
+      });
+
+      return res.status(200).json({ data });
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post(`/api/${table}`, async (req, res, next) => {
+    try {
+      await dbClient.query(`INSERT INTO ${table} (data) VALUES (?)`, [JSON.stringify(req.body ?? {})]);
+      return res.status(201).json({ success: true });
+    } catch (error) {
+      return next(error);
+    }
+  });
+}
+
 app.get('/api/sync/:companyId', async (req, res, next) => {
   const { companyId } = req.params;
   console.log('SYNC GET:', companyId);
 
   try {
-    const [rows] = await pool.execute(
+    const [rows] = await dbClient.query(
       'SELECT data FROM sync_data WHERE company_id = ? ORDER BY updated_at DESC LIMIT 1',
       [companyId],
     );
@@ -113,7 +168,7 @@ app.put('/api/sync/:companyId', async (req, res, next) => {
   console.log('SYNC PUT:', companyId);
 
   try {
-    await pool.execute('INSERT INTO sync_data (company_id, data) VALUES (?, ?)', [
+    await dbClient.query('INSERT INTO sync_data (company_id, data) VALUES (?, ?)', [
       companyId,
       JSON.stringify(data),
     ]);
@@ -149,6 +204,10 @@ app.get('/api/:module', async (req, res, next) => {
   }
 });
 
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+
 app.use((error, _req, res, _next) => {
   if (error?.type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'Invalid JSON payload' });
@@ -165,10 +224,8 @@ app.use((error, _req, res, _next) => {
   return res.status(500).json({ error: 'Internal server error' });
 });
 
-if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
-  app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
 
 export default app;
